@@ -1,12 +1,15 @@
-import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
-
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.compose)
   alias(libs.plugins.google.devtools.ksp)
   alias(libs.plugins.roborazzi)
   alias(libs.plugins.secrets)
-  alias(libs.plugins.google.services)
+}
+
+// Firebase/Google Services configuration is environment-specific and must not be fabricated.
+// The Google Services plugin is applied only when a real google-services.json is present.
+if (file("google-services.json").isFile) {
+  apply(plugin = "com.google.gms.google-services")
 }
 
 android {
@@ -79,8 +82,6 @@ secrets {
   defaultPropertiesFileName = ".env.example"
   ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
 }
-
-googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }
 
 dependencies {
   coreLibraryDesugaring(libs.desugar.jdk.libs)
