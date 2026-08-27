@@ -5,7 +5,6 @@ import com.wireguard.android.backend.GoBackend
 import com.wireguard.android.backend.Statistics
 import com.wireguard.android.backend.Tunnel
 import com.wireguard.config.Config
-import com.wireguard.crypto.Key
 
 sealed interface WireGuardTransportResult {
     data object Started : WireGuardTransportResult
@@ -13,19 +12,21 @@ sealed interface WireGuardTransportResult {
     data class Failure(val message: String) : WireGuardTransportResult
 }
 
-/**
- * Production WireGuard transport backed by the official embeddable WireGuard Android library.
- *
- * CONNECTED is never inferred from VpnService/TUN creation. It is only reported after the backend
- * exposes a non-zero, fresh peer handshake timestamp.
- */
-class WireGuardTransport(context: Context) {
+/** Transport contract kept small so the lifecycle verifier can be tested without Android. */
+interface WireGuardTransport {
+    fun start(config: Config): WireGuardTransportResult
+    fun stop(): WireGuardTransportResult
+    fun latestHandshakeEpochMillis(): Long?
+}
+
+/** Production transport backed by the official WireGuard Android GoBackend/wireguard-go stack. */
+class GoWireGuardTransport(context: Context) : WireGuardTransport {
     private val backend = GoBackend(context.applicationContext)
     private val tunnel = SentinelWireGuardTunnel()
     private var activeConfig: Config? = null
     private var startedAtEpochMillis: Long = 0L
 
-    fun start(config: Config): WireGuardTransportResult = runCatching {
+    override fun start(config: Config): WireGuardTransportResult = runCatching {
         require(config.getPeers().isNotEmpty()) { "WireGuard profile has no peer" }
         val state = backend.setState(tunnel, Tunnel.State.UP, config)
         check(state == Tunnel.State.UP) { "WireGuard backend did not enter UP state" }
@@ -34,10 +35,11 @@ class WireGuardTransport(context: Context) {
         WireGuardTransportResult.Started
     }.getOrElse { error ->
         activeConfig = null
+        startedAtEpochMillis = 0L
         WireGuardTransportResult.Failure(error.message ?: "WireGuard backend startup failed")
     }
 
-    fun stop(): WireGuardTransportResult = runCatching {
+    override fun stop(): WireGuardTransportResult = runCatching {
         backend.setState(tunnel, Tunnel.State.DOWN, null)
         activeConfig = null
         startedAtEpochMillis = 0L
@@ -46,14 +48,14 @@ class WireGuardTransport(context: Context) {
         WireGuardTransportResult.Failure(error.message ?: "WireGuard backend shutdown failed")
     }
 
-    fun latestHandshakeEpochSeconds(): Long? {
+    override fun latestHandshakeEpochMillis(): Long? {
         val config = activeConfig ?: return null
         val peerKey = config.getPeers().firstOrNull()?.publicKey ?: return null
         val stats: Statistics = backend.getStatistics(tunnel)
         val peerStats = stats.peer(peerKey) ?: return null
-        val handshakeMillis = peerStats.latestHandshakeEpochMillis
+        val handshakeMillis = peerStats.latestHandshakeEpochMillis()
         if (handshakeMillis <= 0L || handshakeMillis < startedAtEpochMillis) return null
-        return handshakeMillis / 1000L
+        return handshakeMillis
     }
 
     fun backendVersion(): String = runCatching { backend.version }.getOrDefault("unknown")
