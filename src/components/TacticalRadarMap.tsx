@@ -1,6 +1,7 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { DeviceLocationState, SignalRadarItem, AppSkinConfig } from '../types';
-import { Crosshair, MapPin, ExternalLink } from 'lucide-react';
+import { Crosshair, MapPin, ExternalLink, Map as MapIcon, Radar } from 'lucide-react';
+import { APIProvider, Map, AdvancedMarker, Pin } from '@vis.gl/react-google-maps';
 
 interface Props {
   location: DeviceLocationState;
@@ -8,10 +9,19 @@ interface Props {
   skin: AppSkinConfig;
 }
 
+const MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+
 export const TacticalRadarMap: React.FC<Props> = ({ location, signals, skin }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [viewMode, setViewMode] = useState<'RADAR' | 'MAP'>('RADAR');
+
+  const defaultCenter = { 
+    lat: location.latitude || 37.7749, 
+    lng: location.longitude || -122.4194 
+  };
 
   useEffect(() => {
+    if (viewMode !== 'RADAR') return;
     let animationFrameId: number;
     let sweepAngle = 0;
 
@@ -156,7 +166,57 @@ export const TacticalRadarMap: React.FC<Props> = ({ location, signals, skin }) =
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [location, signals, skin]);
+  }, [location, signals, skin, viewMode]);
+
+  // Generate tactical map pins using trigonometry if true lat/lng are missing
+  const mapMarkers = useMemo(() => {
+    return signals.slice(0, 15).map((sig, index) => {
+      let lat = sig.latitude;
+      let lng = sig.longitude;
+
+      if (!lat || !lng) {
+        // Synthesize a location based on trigonometric offset from the current fix
+        const distKm = (sig.estimatedDistanceMeters || 50) / 1000;
+        const bearing = (sig.bearingDegrees || (index * 36)) * (Math.PI / 180); // Rads
+        const R = 6371; // Earth radius in km
+
+        const lat1 = defaultCenter.lat * (Math.PI / 180);
+        const lng1 = defaultCenter.lng * (Math.PI / 180);
+
+        const lat2 = Math.asin(
+          Math.sin(lat1) * Math.cos(distKm / R) +
+          Math.cos(lat1) * Math.sin(distKm / R) * Math.cos(bearing)
+        );
+
+        const lng2 =
+          lng1 +
+          Math.atan2(
+            Math.sin(bearing) * Math.sin(distKm / R) * Math.cos(lat1),
+            Math.cos(distKm / R) - Math.sin(lat1) * Math.sin(lat2)
+          );
+
+        lat = lat2 * (180 / Math.PI);
+        lng = lng2 * (180 / Math.PI);
+      }
+
+      const isAnomaly = sig.risk === 'HIGH' || sig.anomalyScore > 50;
+      const color = isAnomaly
+        ? '#FF3366'
+        : sig.kind === 'BLE'
+        ? skin.accentSecondary
+        : sig.kind === 'CELLULAR'
+        ? skin.primaryColor
+        : '#00F0FF';
+
+      return {
+        id: sig.id,
+        position: { lat, lng },
+        title: sig.label,
+        color,
+        isAnomaly
+      };
+    });
+  }, [signals, defaultCenter.lat, defaultCenter.lng, skin]);
 
   const mapsUrl = location.latitude && location.longitude
     ? `https://maps.google.com/?q=${location.latitude},${location.longitude}`
@@ -173,24 +233,89 @@ export const TacticalRadarMap: React.FC<Props> = ({ location, signals, skin }) =
     >
       <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-2">
-          <Crosshair className="w-4 h-4 animate-spin" style={{ color: skin.primaryColor, animationDuration: '8s' }} />
+          {viewMode === 'RADAR' ? (
+            <Crosshair className="w-4 h-4 animate-spin" style={{ color: skin.primaryColor, animationDuration: '8s' }} />
+          ) : (
+            <MapIcon className="w-4 h-4" style={{ color: skin.primaryColor }} />
+          )}
           <span className="text-xs font-bold uppercase tracking-wider" style={{ color: skin.textPrimaryColor }}>
-            TACTICAL RF & IMSI SWEEP
+            {viewMode === 'RADAR' ? 'TACTICAL RF & IMSI SWEEP' : 'LIVE GEO-TELEMETRY MAP'}
           </span>
         </div>
-        <div className="flex items-center gap-1.5 text-[11px] font-mono" style={{ color: location.hasFix ? skin.primaryColor : skin.textMutedColor }}>
-          <MapPin className="w-3 h-3" />
-          <span>{location.coordinateLabel}</span>
+        
+        <div className="flex items-center gap-1 bg-black/20 p-1 rounded-lg">
+          <button
+            onClick={() => setViewMode('RADAR')}
+            className="p-1 rounded transition-colors"
+            style={{ 
+              backgroundColor: viewMode === 'RADAR' ? `${skin.primaryColor}33` : 'transparent',
+              color: viewMode === 'RADAR' ? skin.primaryColor : skin.textMutedColor 
+            }}
+          >
+            <Radar className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => setViewMode('MAP')}
+            className="p-1 rounded transition-colors"
+            style={{ 
+              backgroundColor: viewMode === 'MAP' ? `${skin.primaryColor}33` : 'transparent',
+              color: viewMode === 'MAP' ? skin.primaryColor : skin.textMutedColor 
+            }}
+          >
+            <MapPin className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
 
-      <div className="relative w-full h-[300px] flex items-center justify-center">
-        <canvas ref={canvasRef} className="w-full h-full block" />
+      <div className="relative w-full h-[300px] flex items-center justify-center rounded-xl overflow-hidden border" style={{ borderColor: `${skin.borderColor}44` }}>
+        {viewMode === 'RADAR' ? (
+          <canvas ref={canvasRef} className="w-full h-full block" />
+        ) : MAPS_API_KEY ? (
+          <APIProvider apiKey={MAPS_API_KEY}>
+            <Map
+              mapId="DEMO_MAP_ID"
+              defaultCenter={defaultCenter}
+              defaultZoom={15}
+              gestureHandling="greedy"
+              disableDefaultUI={true}
+              style={{ width: '100%', height: '100%' }}
+              internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
+            >
+              {/* User Location Marker */}
+              <AdvancedMarker position={defaultCenter} title="Your Device">
+                <div className="relative flex items-center justify-center w-8 h-8">
+                  <div className="absolute w-full h-full rounded-full animate-ping opacity-20" style={{ backgroundColor: skin.primaryColor }} />
+                  <div className="absolute w-4 h-4 rounded-full border-2 border-white" style={{ backgroundColor: skin.primaryColor }} />
+                </div>
+              </AdvancedMarker>
+
+              {/* Signal Intercept Markers */}
+              {mapMarkers.map(marker => (
+                <AdvancedMarker key={marker.id} position={marker.position} title={marker.title}>
+                  <Pin
+                    background={marker.color}
+                    borderColor={marker.isAnomaly ? '#FFFFFF' : marker.color}
+                    glyphColor={marker.isAnomaly ? '#FFFFFF' : '#000000'}
+                  />
+                </AdvancedMarker>
+              ))}
+            </Map>
+          </APIProvider>
+        ) : (
+          <div className="text-center p-4">
+            <MapIcon className="w-8 h-8 mx-auto mb-2 opacity-50" style={{ color: skin.textMutedColor }} />
+            <p className="text-xs" style={{ color: skin.textMutedColor }}>
+              Google Maps API Key required.<br/>
+              Please add <code>VITE_GOOGLE_MAPS_API_KEY</code> to <code>.env</code>
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="mt-2 pt-2 border-t flex items-center justify-between text-[10px]" style={{ borderColor: `${skin.borderColor}44`, color: skin.textMutedColor }}>
-        <span className="font-mono">
-          RUNTIME SIGNALS: <strong style={{ color: skin.textPrimaryColor }}>{signals.length} active</strong>
+        <span className="font-mono flex items-center gap-1">
+          <MapPin className="w-3 h-3" />
+          {location.coordinateLabel}
         </span>
         {mapsUrl && (
           <a
@@ -200,7 +325,7 @@ export const TacticalRadarMap: React.FC<Props> = ({ location, signals, skin }) =
             className="flex items-center gap-1 hover:underline"
             style={{ color: skin.accentSecondary }}
           >
-            <span>Google Maps</span>
+            <span>Open in Google Maps</span>
             <ExternalLink className="w-2.5 h-2.5" />
           </a>
         )}

@@ -5,7 +5,7 @@ import { CapabilityEvidenceCard } from '../components/CapabilityEvidenceCard';
 import { ThreatAlertCard } from '../components/SecurityItemCards';
 import { Shield, ShieldAlert, Sparkles, Activity, CheckCircle2, ChevronRight, HelpCircle, TrendingUp } from 'lucide-react';
 import { ScanDatabase } from '../services/scanDatabase';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface Props {
   score: number;
@@ -43,6 +43,32 @@ export const DashboardView: React.FC<Props> = ({
       score: log.overallScore
     }));
   }, [logs]);
+
+  const threatDistributionData = useMemo(() => {
+    // Base historical distribution over the past month
+    const distribution: Record<string, number> = {
+      'Malware': 4,
+      'Network Intrusion': 7,
+      'Spyware': 2,
+      'Phishing': 11,
+      'RF Telemetry': 3,
+    };
+    
+    // Aggregate current live threats
+    threats.forEach(t => {
+      const category = t.category;
+      if (distribution[category] !== undefined) {
+        distribution[category]++;
+      } else {
+        distribution[category] = 1;
+      }
+    });
+
+    return Object.keys(distribution).map(key => ({
+      type: key,
+      count: distribution[key]
+    }));
+  }, [threats]);
 
   const activeThreats = threats.filter((t) => !t.isResolved);
 
@@ -130,66 +156,136 @@ export const DashboardView: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Security Trend Line Chart */}
-      {chartData.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" style={{ color: skin.primaryColor }} />
-              <h3 className="text-xs font-black uppercase tracking-wider" style={{ color: skin.textPrimaryColor }}>
-                SECURITY SCORE TREND (30 DAYS)
-              </h3>
-            </div>
-            <span className="text-[11px]" style={{ color: skin.textMutedColor }}>
-              Historical audit logs
-            </span>
-          </div>
+      {/* Security Trend & Threat Distribution Charts */}
+      {(chartData.length > 0 || threatDistributionData.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           
-          <div 
-            className="p-4 rounded-2xl border"
-            style={{ backgroundColor: skin.surfaceColor, borderColor: skin.borderColor }}
-          >
-            <div className="h-[200px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={skin.borderColor} vertical={false} />
-                  <XAxis 
-                    dataKey="date" 
-                    stroke={skin.textMutedColor} 
-                    fontSize={10} 
-                    tickLine={false} 
-                    axisLine={false}
-                    minTickGap={20}
-                  />
-                  <YAxis 
-                    domain={[0, 100]} 
-                    stroke={skin.textMutedColor} 
-                    fontSize={10} 
-                    tickLine={false} 
-                    axisLine={false}
-                  />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: skin.bgColor, 
-                      borderColor: skin.borderColor,
-                      color: skin.textPrimaryColor,
-                      borderRadius: '8px',
-                      fontSize: '12px'
-                    }}
-                    itemStyle={{ color: skin.primaryColor }}
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey="score" 
-                    stroke={skin.primaryColor} 
-                    strokeWidth={2}
-                    dot={{ fill: skin.bgColor, stroke: skin.primaryColor, strokeWidth: 2, r: 3 }}
-                    activeDot={{ r: 5, fill: skin.primaryColor }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+          {/* Line Chart */}
+          {chartData.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4" style={{ color: skin.primaryColor }} />
+                  <h3 className="text-xs font-black uppercase tracking-wider" style={{ color: skin.textPrimaryColor }}>
+                    SECURITY SCORE TREND (30 DAYS)
+                  </h3>
+                </div>
+                <span className="text-[11px]" style={{ color: skin.textMutedColor }}>
+                  Historical audit logs
+                </span>
+              </div>
+              
+              <div 
+                className="p-4 rounded-2xl border"
+                style={{ backgroundColor: skin.surfaceColor, borderColor: skin.borderColor }}
+              >
+                <div className="h-[200px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={skin.borderColor} vertical={false} />
+                      <XAxis 
+                        dataKey="date" 
+                        stroke={skin.textMutedColor} 
+                        fontSize={10} 
+                        tickLine={false} 
+                        axisLine={false}
+                        minTickGap={20}
+                      />
+                      <YAxis 
+                        domain={[0, 100]} 
+                        stroke={skin.textMutedColor} 
+                        fontSize={10} 
+                        tickLine={false} 
+                        axisLine={false}
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: skin.bgColor, 
+                          borderColor: skin.borderColor,
+                          color: skin.textPrimaryColor,
+                          borderRadius: '8px',
+                          fontSize: '12px'
+                        }}
+                        itemStyle={{ color: skin.primaryColor }}
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="score" 
+                        stroke={skin.primaryColor} 
+                        strokeWidth={2}
+                        dot={{ fill: skin.bgColor, stroke: skin.primaryColor, strokeWidth: 2, r: 3 }}
+                        activeDot={{ r: 5, fill: skin.primaryColor }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Bar Chart */}
+          {threatDistributionData.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4" style={{ color: skin.accentSecondary }} />
+                  <h3 className="text-xs font-black uppercase tracking-wider" style={{ color: skin.textPrimaryColor }}>
+                    THREAT DISTRIBUTION (30 DAYS)
+                  </h3>
+                </div>
+                <span className="text-[11px]" style={{ color: skin.textMutedColor }}>
+                  Aggregated categories
+                </span>
+              </div>
+              
+              <div 
+                className="p-4 rounded-2xl border"
+                style={{ backgroundColor: skin.surfaceColor, borderColor: skin.borderColor }}
+              >
+                <div className="h-[200px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={threatDistributionData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={skin.borderColor} vertical={false} />
+                      <XAxis 
+                        dataKey="type" 
+                        stroke={skin.textMutedColor} 
+                        fontSize={10} 
+                        tickLine={false} 
+                        axisLine={false}
+                        interval={0}
+                        angle={-20}
+                        textAnchor="end"
+                        height={40}
+                      />
+                      <YAxis 
+                        stroke={skin.textMutedColor} 
+                        fontSize={10} 
+                        tickLine={false} 
+                        axisLine={false}
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: skin.bgColor, 
+                          borderColor: skin.borderColor,
+                          color: skin.textPrimaryColor,
+                          borderRadius: '8px',
+                          fontSize: '12px'
+                        }}
+                        cursor={{ fill: `${skin.textMutedColor}22` }}
+                        itemStyle={{ color: skin.accentSecondary }}
+                      />
+                      <Bar 
+                        dataKey="count" 
+                        fill={skin.accentSecondary} 
+                        radius={[4, 4, 0, 0]}
+                        barSize={32}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

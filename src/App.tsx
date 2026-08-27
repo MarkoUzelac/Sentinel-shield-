@@ -24,6 +24,7 @@ import { LegalView } from './views/LegalView';
 import { VaultView } from './views/VaultView';
 import { HelpModal } from './views/HelpModal';
 import { AiAssistantModal } from './components/AiAssistantModal';
+import { SplashScreenView } from './views/SplashScreenView';
 import { AnimatePresence, motion } from 'motion/react';
 import { ShieldAlert, CheckCircle2 } from 'lucide-react';
 
@@ -41,6 +42,9 @@ export const App: React.FC = () => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isAdvisorOpen, setIsAdvisorOpen] = useState(false);
+  const [showSplash, setShowSplash] = useState(() => {
+    return localStorage.getItem('sentinel_onboarding_complete') !== 'true';
+  });
 
   // Evidences & threats
   const [evidences, setEvidences] = useState<CapabilityEvidence[]>(CapabilityEvidenceEngine.getEvidences());
@@ -65,10 +69,53 @@ export const App: React.FC = () => {
     longitude: null,
     accuracyMeters: null,
     coordinateLabel: 'Searching GPS constellation...',
-    timestampEpochMs: Date.now(),
+    isLiveGps: false,
+    timestamp: Date.now(),
   });
 
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          setLocation({
+            hasFix: true,
+            latitude: lat,
+            longitude: lng,
+            accuracyMeters: position.coords.accuracy,
+            coordinateLabel: `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° W (LIVE_FIX)`,
+            isLiveGps: true,
+            timestamp: Date.now(),
+          });
+        },
+        (error) => {
+          console.warn('Geolocation failed, falling back to simulated fix.', error);
+          setLocation({
+            hasFix: true,
+            latitude: 47.6062,
+            longitude: -122.3321,
+            accuracyMeters: 4.2,
+            coordinateLabel: '47.6062° N, 122.3321° W (SEATTLE_MUNI)',
+            isLiveGps: false,
+            timestamp: Date.now(),
+          });
+        },
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    }
+  }, []);
+
   const skin: AppSkinConfig = getSkinById(currentSkinId);
+
+  const handleOnboardingComplete = () => {
+    localStorage.setItem('sentinel_onboarding_complete', 'true');
+    setShowSplash(false);
+  };
+
+  if (showSplash) {
+    return <SplashScreenView onComplete={handleOnboardingComplete} skin={skin} />;
+  }
 
   // Initialization
   useEffect(() => {

@@ -46,11 +46,11 @@ Return strict JSON ONLY with the following schema:
   "recommendation": "Specific actionable mitigation or least-privilege security advice"
 }`;
 
-        let modelToUse = "gemini-2.5-flash";
+        let modelToUse = "gemini-3.6-flash";
         let response;
         try {
           response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3.6-flash",
             contents: prompt,
             config: {
               responseMimeType: "application/json",
@@ -58,7 +58,7 @@ Return strict JSON ONLY with the following schema:
           });
         } catch {
           response = await ai.models.generateContent({
-            model: "gemini-2.0-flash",
+            model: "gemini-3.6-flash",
             contents: prompt,
             config: {
               responseMimeType: "application/json",
@@ -159,12 +159,12 @@ User question: ${userMessage}`;
         let response;
         try {
           response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3.6-flash",
             contents: prompt,
           });
         } catch {
           response = await ai.models.generateContent({
-            model: "gemini-2.0-flash",
+            model: "gemini-3.6-flash",
             contents: prompt,
           });
         }
