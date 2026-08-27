@@ -41,6 +41,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.CapabilityId
+import com.example.ui.components.CapabilityEvidenceCard
 import com.example.ui.components.VpnServerCard
 import com.example.ui.theme.CyberCyan
 import com.example.ui.theme.CyberGreen
@@ -64,6 +66,9 @@ fun VpnManagerScreen(
     val selectedServer by viewModel.selectedVpnServer.collectAsState()
     val vpnState by viewModel.vpnState.collectAsState()
     val isProvisioned by viewModel.isVpnProvisioned.collectAsState()
+    val evidence by viewModel.capabilityEvidence.collectAsState()
+    val transportEvidence = evidence.firstOrNull { it.id == CapabilityId.VPN_TRANSPORT }
+    val handshakeEvidence = evidence.firstOrNull { it.id == CapabilityId.VPN_HANDSHAKE }
     val isConnected = vpnState is WireGuardTunnelState.Connected
     val isStarting = vpnState is WireGuardTunnelState.Starting ||
         vpnState is WireGuardTunnelState.AwaitingUserConsent ||
@@ -77,6 +82,10 @@ fun VpnManagerScreen(
             Text("WIREGUARD VPN LIFECYCLE", 12.sp, FontWeight.Bold, TextMuted, letterSpacing = 1.sp)
             Spacer(Modifier.height(4.dp))
             Text("Connected is shown only after a verified WireGuard peer handshake.", 13.sp, color = TextSecondary)
+            Spacer(Modifier.height(8.dp))
+            transportEvidence?.let { CapabilityEvidenceCard(it) }
+            Spacer(Modifier.height(8.dp))
+            handshakeEvidence?.let { CapabilityEvidenceCard(it) }
             Spacer(Modifier.height(4.dp))
             Text(
                 if (isProvisioned) "REAL PROFILE PROVISIONED" else "PROFILE NOT PROVISIONED",
@@ -92,37 +101,21 @@ fun VpnManagerScreen(
                 modifier = Modifier.fillMaxWidth().testTag("vpn_provisioning_card"),
                 shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(containerColor = DarkCard),
-                border = CardDefaults.outlinedCardBorder().copy(
-                    brush = Brush.linearGradient(listOf(DarkCardBorder, CyberOrange.copy(alpha = .55f)))
-                )
+                border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(DarkCardBorder, CyberOrange.copy(alpha = .55f))))
             ) {
                 Column(Modifier.fillMaxWidth().padding(18.dp)) {
                     Text("PROVISION REAL VPN", 12.sp, FontWeight.Bold, TextMuted, letterSpacing = 1.sp)
                     Spacer(Modifier.height(6.dp))
-                    Text(
-                        "Import a WireGuard .conf profile. The private key stays inside Sentinel Shield app-private storage and is never shown or committed.",
-                        12.sp,
-                        color = TextSecondary
-                    )
+                    Text("Import a WireGuard .conf profile. The private key stays inside Sentinel Shield app-private storage and is never shown or committed.", 12.sp, color = TextSecondary)
                     Spacer(Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                        Button(
-                            onClick = onImportWireGuardProfile,
-                            colors = ButtonDefaults.buttonColors(containerColor = CyberOrange, contentColor = DarkBackground),
-                            modifier = Modifier.weight(1f).height(46.dp).testTag("btn_import_wireguard_profile"),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
+                        Button(onClick = onImportWireGuardProfile, colors = ButtonDefaults.buttonColors(containerColor = CyberOrange, contentColor = DarkBackground), modifier = Modifier.weight(1f).height(46.dp).testTag("btn_import_wireguard_profile"), shape = RoundedCornerShape(12.dp)) {
                             Icon(Icons.Default.UploadFile, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
                             Text("Import .conf", fontWeight = FontWeight.Bold)
                         }
                         if (isProvisioned) {
-                            Button(
-                                onClick = { viewModel.removeWireGuardProfile() },
-                                colors = ButtonDefaults.buttonColors(containerColor = DarkCardBorder, contentColor = TextPrimary),
-                                modifier = Modifier.height(46.dp).testTag("btn_remove_wireguard_profile"),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
+                            Button(onClick = { viewModel.removeWireGuardProfile() }, colors = ButtonDefaults.buttonColors(containerColor = DarkCardBorder, contentColor = TextPrimary), modifier = Modifier.height(46.dp).testTag("btn_remove_wireguard_profile"), shape = RoundedCornerShape(12.dp)) {
                                 Icon(Icons.Default.Delete, contentDescription = null)
                                 Spacer(Modifier.width(6.dp))
                                 Text("Remove", fontWeight = FontWeight.Bold)
@@ -138,17 +131,10 @@ fun VpnManagerScreen(
                 modifier = Modifier.fillMaxWidth().testTag("vpn_status_card"),
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(containerColor = DarkCard),
-                border = CardDefaults.outlinedCardBorder().copy(
-                    brush = Brush.linearGradient(listOf(DarkCardBorder, if (isConnected) CyberGreen else CyberCyan))
-                )
+                border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(DarkCardBorder, if (isConnected) CyberGreen else CyberCyan)))
             ) {
                 Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(
-                        Modifier.size(90.dp).clip(CircleShape)
-                            .background(if (isConnected) CyberGreen.copy(alpha = .2f) else CyberCyan.copy(alpha = .15f))
-                            .border(2.dp, if (isConnected) CyberGreen else CyberCyan, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    Box(Modifier.size(90.dp).clip(CircleShape).background(if (isConnected) CyberGreen.copy(alpha = .2f) else CyberCyan.copy(alpha = .15f)).border(2.dp, if (isConnected) CyberGreen else CyberCyan, CircleShape), contentAlignment = Alignment.Center) {
                         Icon(Icons.Default.VpnKey, null, tint = if (isConnected) CyberGreen else CyberCyan, modifier = Modifier.size(44.dp))
                     }
                     Spacer(Modifier.height(16.dp))
@@ -180,13 +166,7 @@ fun VpnManagerScreen(
                         modifier = Modifier.padding(top = 4.dp)
                     )
                     Spacer(Modifier.height(20.dp))
-                    Button(
-                        onClick = { viewModel.toggleVpnConnection() },
-                        enabled = !isStarting && isProvisioned,
-                        colors = ButtonDefaults.buttonColors(containerColor = if (isConnected) CyberGreen else CyberCyan, contentColor = DarkBackground),
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.fillMaxWidth().height(50.dp).testTag("btn_toggle_vpn")
-                    ) {
+                    Button(onClick = { viewModel.toggleVpnConnection() }, enabled = !isStarting && isProvisioned, colors = ButtonDefaults.buttonColors(containerColor = if (isConnected) CyberGreen else CyberCyan, contentColor = DarkBackground), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().height(50.dp).testTag("btn_toggle_vpn")) {
                         if (isStarting) {
                             CircularProgressIndicator(Modifier.size(18.dp), color = DarkBackground, strokeWidth = 2.dp)
                             Spacer(Modifier.width(8.dp))
@@ -203,7 +183,6 @@ fun VpnManagerScreen(
                 VpnSpecCard("Endpoint", if (selectedServer?.ipAddress.isNullOrBlank()) "Not provisioned" else "Metadata only", Icons.Default.Public, Modifier.weight(1f))
             }
         }
-
         item { Text("SERVER LOCATIONS (${servers.size})", 12.sp, FontWeight.Bold, TextMuted, letterSpacing = 1.sp, modifier = Modifier.padding(top = 8.dp)) }
         items(servers, key = { it.id }) { server ->
             VpnServerCard(server, selectedServer?.id == server.id, isConnected && selectedServer?.id == server.id, onSelect = { viewModel.selectVpnServer(server) })
