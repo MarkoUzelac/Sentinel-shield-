@@ -19,14 +19,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Psychology
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
@@ -36,7 +32,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -84,7 +79,6 @@ fun DashboardScreen(
     val isScanning by viewModel.isDeepScanning.collectAsState()
     val scanProgress by viewModel.deepScanProgress.collectAsState()
     val scanStep by viewModel.deepScanStep.collectAsState()
-
     val isRealtimeShieldActive by viewModel.isRealtimeShieldActive.collectAsState()
     val isAdBlockActive by viewModel.isAdBlockActive.collectAsState()
     val isPhishingProtectionActive by viewModel.isPhishingProtectionActive.collectAsState()
@@ -93,84 +87,41 @@ fun DashboardScreen(
     val logs by viewModel.scanLogs.collectAsState()
 
     LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .background(DarkBackground)
-            .padding(horizontal = 16.dp),
+        modifier = modifier.fillMaxSize().background(DarkBackground).padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
             Spacer(modifier = Modifier.height(8.dp))
-            // App Title Header Banner
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(CyberCyan.copy(alpha = 0.2f))
-                        .border(1.dp, CyberCyan, CircleShape),
+                    modifier = Modifier.size(40.dp).clip(CircleShape).background(CyberCyan.copy(alpha = 0.2f)).border(1.dp, CyberCyan, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Security,
-                        contentDescription = null,
-                        tint = CyberCyan,
-                        modifier = Modifier.size(24.dp)
-                    )
+                    Icon(Icons.Default.Security, contentDescription = null, tint = CyberCyan, modifier = Modifier.size(24.dp))
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
-                    Text(
-                        text = "SENTINEL SHIELD PRO",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
-                        letterSpacing = 1.sp
-                    )
-                    Text(
-                        text = "Real-Time Protection • v2.6 Premium",
-                        fontSize = 12.sp,
-                        color = TextSecondary
-                    )
+                    Text("SENTINEL SHIELD PRO", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary, letterSpacing = 1.sp)
+                    Text("Production security baseline • v1.0", fontSize = 12.sp, color = TextSecondary)
                 }
             }
         }
 
-        // Shield Gauge Arc Card
-        item {
-            ShieldGaugeCard(score = score, isScanning = isScanning)
-        }
+        item { ShieldGaugeCard(score = score, isScanning = isScanning) }
 
-        // Deep System Audit Scan Trigger Bar
         item {
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("deep_scan_card"),
+                modifier = Modifier.fillMaxWidth().testTag("deep_scan_card"),
                 shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(containerColor = DarkCard),
-                border = CardDefaults.outlinedCardBorder().copy(
-                    brush = Brush.linearGradient(listOf(DarkCardBorder, CyberCyan.copy(alpha = 0.5f)))
-                )
+                border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(DarkCardBorder, CyberCyan.copy(alpha = 0.5f))))
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
+                            Text("Local Security Audit", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                             Text(
-                                text = "Full Deep System Audit",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextPrimary
-                            )
-                            Text(
-                                text = if (isScanning) scanStep else "Scan installed packages, network interfaces & privacy settings",
+                                if (isScanning) scanStep else "Run local diagnostics; results are not a full malware scan.",
                                 fontSize = 12.sp,
                                 color = if (isScanning) CyberCyan else TextSecondary
                             )
@@ -179,28 +130,18 @@ fun DashboardScreen(
                         Button(
                             onClick = { viewModel.startDeepSystemScan() },
                             enabled = !isScanning,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = CyberCyan,
-                                contentColor = DarkBackground
-                            ),
+                            colors = ButtonDefaults.buttonColors(containerColor = CyberCyan, contentColor = DarkBackground),
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.testTag("btn_run_deep_scan")
                         ) {
-                            Text(
-                                text = if (isScanning) "Scanning..." else "Run Scan",
-                                fontWeight = FontWeight.Bold
-                            )
+                            Text(if (isScanning) "Scanning..." else "Run Scan", fontWeight = FontWeight.Bold)
                         }
                     }
-
                     if (isScanning) {
                         Spacer(modifier = Modifier.height(12.dp))
                         LinearProgressIndicator(
                             progress = { scanProgress },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                                .clip(RoundedCornerShape(3.dp)),
+                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
                             color = CyberCyan,
                             trackColor = DarkSurface
                         )
@@ -209,76 +150,26 @@ fun DashboardScreen(
             }
         }
 
-        // Quick Action Grid (2 columns)
         item {
-            Text(
-                text = "QUICK DEFENSE TOOLS",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextMuted,
-                letterSpacing = 1.sp,
-                modifier = Modifier.padding(start = 4.dp, top = 4.dp)
-            )
+            Text("QUICK DEFENSE TOOLS", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 1.sp, modifier = Modifier.padding(start = 4.dp, top = 4.dp))
         }
 
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                QuickActionButton(
-                    title = "AI Scanner",
-                    subtitle = "Phishing & URL",
-                    icon = Icons.Default.Psychology,
-                    accentColor = CyberCyan,
-                    onClick = onNavigateToAiScanner,
-                    modifier = Modifier.weight(1f)
-                )
-                QuickActionButton(
-                    title = "Wi-Fi & Speed",
-                    subtitle = "Network Audit",
-                    icon = Icons.Default.Wifi,
-                    accentColor = CyberGreen,
-                    onClick = onNavigateToNetwork,
-                    modifier = Modifier.weight(1f)
-                )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                QuickActionButton("AI Scanner", "Phishing & URL", Icons.Default.Psychology, CyberCyan, onNavigateToAiScanner, Modifier.weight(1f))
+                QuickActionButton("Wi-Fi & Speed", "Diagnostic", Icons.Default.Wifi, CyberGreen, onNavigateToNetwork, Modifier.weight(1f))
             }
         }
 
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                QuickActionButton(
-                    title = "VPN Tunnel",
-                    subtitle = if (isVpnConnected) selectedServer?.country ?: "Connected" else "Encrypted IP",
-                    icon = Icons.Default.VpnKey,
-                    accentColor = if (isVpnConnected) CyberGreen else CyberCyan,
-                    onClick = onNavigateToVpn,
-                    modifier = Modifier.weight(1f)
-                )
-                QuickActionButton(
-                    title = "Dark Web",
-                    subtitle = "Breach Monitor",
-                    icon = Icons.Default.Language,
-                    accentColor = CyberOrange,
-                    onClick = onNavigateToDarkWeb,
-                    modifier = Modifier.weight(1f)
-                )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                QuickActionButton("VPN Tunnel", if (isVpnConnected) selectedServer?.country ?: "Connected" else "Not connected", Icons.Default.VpnKey, if (isVpnConnected) CyberGreen else CyberCyan, onNavigateToVpn, Modifier.weight(1f))
+                QuickActionButton("Breach Monitor", "Unverified demo", Icons.Default.Language, CyberOrange, onNavigateToDarkWeb, Modifier.weight(1f))
             }
         }
 
-        // Live Security Shield Controls
         item {
-            Text(
-                text = "REAL-TIME PROTECTION CONTROL",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextMuted,
-                letterSpacing = 1.sp,
-                modifier = Modifier.padding(start = 4.dp, top = 8.dp)
-            )
+            Text("LOCAL PROTECTION CONTROLS", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 1.sp, modifier = Modifier.padding(start = 4.dp, top = 8.dp))
         }
 
         item {
@@ -286,63 +177,24 @@ fun DashboardScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = DarkCard),
-                border = CardDefaults.outlinedCardBorder().copy(
-                    brush = androidx.compose.ui.graphics.SolidColor(DarkCardBorder)
-                )
+                border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DarkCardBorder))
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    ShieldSwitchRow(
-                        title = "Real-Time System Guard",
-                        subtitle = "Monitor background app activities & permissions",
-                        checked = isRealtimeShieldActive,
-                        onCheckedChange = { viewModel.toggleRealtimeShield(it) },
-                        testTag = "switch_realtime_guard"
-                    )
+                    ShieldSwitchRow("Local Guard State", "UI control only until a background enforcement service is wired", isRealtimeShieldActive, { viewModel.toggleRealtimeShield(it) }, "switch_realtime_guard")
                     Spacer(modifier = Modifier.height(12.dp))
-                    ShieldSwitchRow(
-                        title = "Anti-Phishing & Malicious Web Filter",
-                        subtitle = "Block rogue domains & credential stealing scripts",
-                        checked = isPhishingProtectionActive,
-                        onCheckedChange = { viewModel.togglePhishingProtection(it) },
-                        testTag = "switch_phishing_protection"
-                    )
+                    ShieldSwitchRow("Phishing Protection", "Local heuristic/AI analysis for submitted targets", isPhishingProtectionActive, { viewModel.togglePhishingProtection(it) }, "switch_phishing_protection")
                     Spacer(modifier = Modifier.height(12.dp))
-                    ShieldSwitchRow(
-                        title = "AdBlock Pro & Telemetry Blocker",
-                        subtitle = "Prevent third-party ad trackers & analytics leaks",
-                        checked = isAdBlockActive,
-                        onCheckedChange = { viewModel.toggleAdBlock(it) },
-                        testTag = "switch_adblock_pro"
-                    )
+                    ShieldSwitchRow("Telemetry Blocker", "Configuration state; network filtering is not implemented here", isAdBlockActive, { viewModel.toggleAdBlock(it) }, "switch_adblock_pro")
                 }
             }
         }
 
-        // Room DB Security Logs Feed
         item {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-            ) {
-                Text(
-                    text = "SECURITY AUDIT LOGS (${logs.size})",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextMuted,
-                    letterSpacing = 1.sp,
-                    modifier = Modifier.weight(1f)
-                )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Text("SECURITY AUDIT LOGS (${logs.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 1.sp, modifier = Modifier.weight(1f))
                 if (logs.isNotEmpty()) {
-                    IconButton(
-                        onClick = { viewModel.clearAllLogs() },
-                        modifier = Modifier.size(24.dp).testTag("btn_clear_logs")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Clear Audit History",
-                            tint = TextMuted,
-                            modifier = Modifier.size(18.dp)
-                        )
+                    IconButton(onClick = { viewModel.clearAllLogs() }, modifier = Modifier.size(24.dp).testTag("btn_clear_logs")) {
+                        Icon(Icons.Default.Delete, contentDescription = "Clear Audit History", tint = TextMuted, modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -350,137 +202,61 @@ fun DashboardScreen(
 
         if (logs.isEmpty()) {
             item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(DarkCard)
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(DarkCard).padding(24.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Default.Security,
-                            contentDescription = null,
-                            tint = TextMuted,
-                            modifier = Modifier.size(32.dp)
-                        )
+                        Icon(Icons.Default.Security, contentDescription = null, tint = TextMuted, modifier = Modifier.size(32.dp))
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "No Audit Logs Yet",
-                            fontSize = 14.sp,
-                            color = TextSecondary
-                        )
-                        Text(
-                            text = "Run a Deep Scan or Network Audit to log events here.",
-                            fontSize = 12.sp,
-                            color = TextMuted
-                        )
+                        Text("No Audit Logs Yet", fontSize = 14.sp, color = TextSecondary)
+                        Text("Run a local audit to log events here.", fontSize = 12.sp, color = TextMuted)
                     }
                 }
             }
         } else {
-            items(logs, key = { it.id }) { log ->
-                ScanLogItemCard(log = log, onDelete = { viewModel.deleteLog(log.id) })
-            }
+            items(logs, key = { it.id }) { log -> ScanLogItemCard(log = log, onDelete = { viewModel.deleteLog(log.id) }) }
         }
-
-        item {
-            Spacer(modifier = Modifier.height(24.dp))
-        }
+        item { Spacer(modifier = Modifier.height(24.dp)) }
     }
 }
 
 @Composable
-fun ShieldSwitchRow(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    testTag: String
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth()
-    ) {
+fun ShieldSwitchRow(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit, testTag: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
-            )
-            Text(
-                text = subtitle,
-                fontSize = 11.sp,
-                color = TextSecondary
-            )
+            Text(title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Text(subtitle, fontSize = 11.sp, color = TextSecondary)
         }
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = DarkBackground,
-                checkedTrackColor = CyberCyan,
-                uncheckedThumbColor = TextMuted,
-                uncheckedTrackColor = DarkSurface
-            ),
+            colors = SwitchDefaults.colors(checkedThumbColor = DarkBackground, checkedTrackColor = CyberCyan, uncheckedThumbColor = TextMuted, uncheckedTrackColor = DarkSurface),
             modifier = Modifier.testTag(testTag)
         )
     }
 }
 
 @Composable
-fun ScanLogItemCard(
-    log: ScanLogEntity,
-    onDelete: () -> Unit
-) {
+fun ScanLogItemCard(log: ScanLogEntity, onDelete: () -> Unit) {
     val statusColor = when (log.status) {
         "PASSED" -> CyberGreen
         "WARNING" -> CyberOrange
         else -> CyberRed
     }
-
     val dateFormat = remember { SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()) }
-
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("log_item_${log.id}"),
+        modifier = Modifier.fillMaxWidth().testTag("log_item_${log.id}"),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = DarkCard),
-        border = CardDefaults.outlinedCardBorder().copy(
-            brush = androidx.compose.ui.graphics.SolidColor(DarkCardBorder)
-        )
+        border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DarkCardBorder))
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .clip(CircleShape)
-                        .background(statusColor)
-                )
+                Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(statusColor))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = log.title,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    text = dateFormat.format(Date(log.timestamp)),
-                    fontSize = 11.sp,
-                    color = TextMuted
-                )
+                Text(log.title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary, modifier = Modifier.weight(1f))
+                Text(dateFormat.format(Date(log.timestamp)), fontSize = 11.sp, color = TextMuted)
             }
             Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = log.summary,
-                fontSize = 12.sp,
-                color = TextSecondary
-            )
+            Text(log.summary, fontSize = 12.sp, color = TextSecondary)
         }
     }
 }
