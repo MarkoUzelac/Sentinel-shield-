@@ -1,15 +1,26 @@
 package com.example.ui.viewmodel
 
+import android.Manifest
 import android.app.Application
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.telephony.TelephonyManager
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.SecurityRepository
 import com.example.data.local.AppDatabase
 import com.example.data.local.ScanLogEntity
 import com.example.data.model.BreachRecord
+import com.example.data.model.CallSecurityObservation
+import com.example.data.model.CapabilityEvidence
+import com.example.data.model.CapabilityEvidenceEngine
+import com.example.data.model.CapabilityId
+import com.example.data.model.CapabilityStatus
 import com.example.data.model.JurisdictionInfo
 import com.example.data.model.NetworkSpeedResult
+import com.example.data.model.RadarObservation
 import com.example.data.model.ThreatItem
 import com.example.data.model.ThreatSeverity
 import com.example.data.model.VpnServer
@@ -29,6 +40,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: SecurityRepository
     private val wireGuardProfileStore = WireGuardProfileStore(application)
     private val vpnController = WireGuardTunnelController(application)
+    private val telephonyManager = application.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
     val vpnState: StateFlow<WireGuardTunnelState> = vpnController.state
     private val _vpnConsentRequest = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
     val vpnConsentRequest: SharedFlow<Intent> = _vpnConsentRequest
@@ -49,7 +61,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val isAdBlockActive: StateFlow<Boolean> = _isAdBlockActive.asStateFlow()
     private val _isPhishingProtectionActive = MutableStateFlow(true)
     val isPhishingProtectionActive: StateFlow<Boolean> = _isPhishingProtectionActive.asStateFlow()
-    private val _securityScore = MutableStateFlow(94)
+    private val _securityScore = MutableStateFlow(0)
     val securityScore: StateFlow<Int> = _securityScore.asStateFlow()
     private val _vpnServers = MutableStateFlow<List<VpnServer>>(emptyList())
     val vpnServers: StateFlow<List<VpnServer>> = _vpnServers.asStateFlow()
@@ -87,6 +99,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val hasSearchedBreaches: StateFlow<Boolean> = _hasSearchedBreaches.asStateFlow()
     val jurisdictions: List<JurisdictionInfo>
 
+    private val _radarObservation = MutableStateFlow(readRadarObservation())
+    val radarObservation: StateFlow<RadarObservation> = _radarObservation.asStateFlow()
+    private val _callSecurityObservation = MutableStateFlow(readCallSecurityObservation())
+    val callSecurityObservation: StateFlow<CallSecurityObservation> = _callSecurityObservation.asStateFlow()
+    private val _capabilityEvidence = MutableStateFlow<List<CapabilityEvidence>>(emptyList())
+    val capabilityEvidence: StateFlow<List<CapabilityEvidence>> = _capabilityEvidence.asStateFlow()
+
     init {
         val database = AppDatabase.getDatabase(application)
         repository = SecurityRepository(database.scanLogDao())
@@ -95,20 +114,117 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _vpnServers.value = servers
         _selectedVpnServer.value = servers.firstOrNull()
         jurisdictions = repository.getJurisdictions()
+
+        viewModelScope.launch {
+            vpnController.state.collect { rebuildCapabilityEvidence() }
+        }
+        rebuildCapabilityEvidence()
     }
 
-    fun toggleRealtimeShield(active: Boolean) { _isRealtimeShieldActive.value = active; updateSecurityScore() }
-    fun toggleAdBlock(active: Boolean) { _isAdBlockActive.value = active; updateSecurityScore() }
-    fun togglePhishingProtection(active: Boolean) { _isPhishingProtectionActive.value = active; updateSecurityScore() }
-
-    private fun updateSecurityScore() {
-        var score = 100
-        if (!_isRealtimeShieldActive.value) score -= 40
-        if (!_isPhishingProtectionActive.value) score -= 25
-        if (!_isAdBlockActive.value) score -= 15
-        if (vpnController.state.value is WireGuardTunnelState.Connected) score += 5
-        _securityScore.value = score.coerceIn(0, 100)
+    private fun readRadarObservation(): RadarObservation {
+        val permissionGranted = ContextCompat.checkSelfPermission(
+            getApplication<Application>(),
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val telephonyAvailable = telephonyManager != null && getApplication<Application>().packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)
+        val cellCount = if (permissionGranted && telephonyAvailable) {
+            runCatching { telephonyManager?.allCellInfo?.size ?: 0 }.getOrDefault(0)
+        } else {
+            0
+        }
+        return RadarObservation(permissionGranted, cellCount, telephonyAvailable)
     }
+
+    private fun readCallSecurityObservation(): CallSecurityObservation = CallSecurityObservation(
+        telephonyAvailable = telephonyManager != null && getApplication<Application>().packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)
+    )
+
+    fun refreshEvidenceSources() {
+        _radarObservation.value = readRadarObservation()
+        _callSecurityObservation.value = readCallSecurityObservation()
+        rebuildCapabilityEvidence()
+    }
+
+    fun markMmiResultVerified(verified: Boolean) {
+        _callSecurityObservation.value = _callSecurityObservation.value.copy(mmiResultVerified = verified)
+        rebuildCapabilityEvidence()
+    }
+
+    private fun rebuildCapabilityEvidence() {
+        val connected = vpnController.state.value is WireGuardTunnelState.Connected
+        val evidence = listOf(
+            CapabilityEvidenceEngine.vpnTransport(_isVpnProvisioned.value, connected),
+            CapabilityEvidenceEngine.vpnHandshake(connected, connected),
+            CapabilityEvidenceEngine.radar(_radarObservation.value),
+            CapabilityEvidenceEngine.callSecurity(_callSecurityObservation.value),
+            CapabilityEvidenceEngine.localSetting(
+                CapabilityId.PHISHING_PROTECTION,
+                "Phishing protection",
+                _isPhishingProtectionActive.value,
+                "Sentinel local protection setting",
+                "Lokalna phishing zaštita je uključena, ali aktivna učinkovitost nije neovisno verificirana."
+            ),
+            CapabilityEvidenceEngine.localSetting(
+                CapabilityId.AD_TELEMETRY_FILTER,
+                "Ad/telemetry filter",
+                _isAdBlockActive.value,
+                "Sentinel local protection setting",
+                "Lokalni filter je uključen; njegova stvarna pokrivenost nije neovisno verificirana."
+            ),
+            CapabilityEvidenceEngine.localSetting(
+                CapabilityId.REALTIME_SHIELD,
+                "Background shield",
+                _isRealtimeShieldActive.value,
+                "Sentinel local protection setting",
+                "Lokalni background shield je uključen; to samo po sebi nije dokaz potpune zaštite uređaja."
+            ),
+            CapabilityEvidence(
+                CapabilityId.AI_THREAT_ANALYSIS,
+                "AI threat analysis",
+                if (_lastThreatResult.value != null) CapabilityStatus.UNVERIFIED else CapabilityStatus.UNAVAILABLE,
+                "Sentinel AI repository",
+                if (_lastThreatResult.value != null) "AI analiza je izvršena, ali rezultat nije neovisni dokaz kompromitiranosti uređaja." else "Nema izvršene AI analize."
+            ),
+            CapabilityEvidence(
+                CapabilityId.DARK_WEB_LOOKUP,
+                "Dark Web lookup",
+                if (_hasSearchedBreaches.value) CapabilityStatus.UNVERIFIED else CapabilityStatus.UNAVAILABLE,
+                "SecurityRepository breach lookup",
+                if (_hasSearchedBreaches.value) "Rezultat pretrage je dohvaćen, ali dostupnost izvora ne dokazuje potpunu pokrivenost dark weba." else "Nema izvršene pretrage."
+            ),
+            CapabilityEvidence(
+                CapabilityId.NETWORK_AUDIT,
+                "Network audit",
+                if (_speedTestResult.value != null) CapabilityStatus.UNVERIFIED else CapabilityStatus.UNAVAILABLE,
+                "SecurityRepository network audit",
+                if (_speedTestResult.value != null) "Dostupan je lokalni dijagnostički rezultat; nije dokaz kompletne sigurnosne procjene mreže." else "Nema izvršenog mrežnog audita."
+            ),
+            CapabilityEvidence(
+                CapabilityId.LEGAL_GUIDANCE,
+                "Legal guidance",
+                CapabilityStatus.VERIFIED,
+                "Bundled jurisdiction dataset",
+                "Prikazani je sadržaj lokalni referentni vodič, a ne pravno zastupanje."
+            )
+        )
+        _capabilityEvidence.value = evidence
+        updateSecurityScoreFromEvidence(evidence)
+    }
+
+    private fun updateSecurityScoreFromEvidence(evidence: List<CapabilityEvidence>) {
+        if (evidence.isEmpty()) return
+        val weights = mapOf(
+            CapabilityStatus.VERIFIED to 1.0,
+            CapabilityStatus.UNVERIFIED to 0.55,
+            CapabilityStatus.UNAVAILABLE to 0.0
+        )
+        val score = evidence.map { weights.getValue(it.status) }.average() * 100.0
+        _securityScore.value = score.toInt().coerceIn(0, 100)
+    }
+
+    fun toggleRealtimeShield(active: Boolean) { _isRealtimeShieldActive.value = active; rebuildCapabilityEvidence() }
+    fun toggleAdBlock(active: Boolean) { _isAdBlockActive.value = active; rebuildCapabilityEvidence() }
+    fun togglePhishingProtection(active: Boolean) { _isPhishingProtectionActive.value = active; rebuildCapabilityEvidence() }
 
     fun prepareVpnConsent(): Intent? {
         val intent = vpnController.prepare()
@@ -137,6 +253,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             vpnController.markError(result.exceptionOrNull()?.message ?: "Invalid WireGuard profile")
         }
+        rebuildCapabilityEvidence()
         return result
     }
 
@@ -146,12 +263,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         vpnController.stop()
         wireGuardProfileStore.clear()
         _isVpnProvisioned.value = false
+        rebuildCapabilityEvidence()
     }
 
     fun selectVpnServer(server: VpnServer) {
         _selectedVpnServer.value = server
         if (vpnController.state.value is WireGuardTunnelState.Connected) vpnController.stop()
-        updateSecurityScore()
+        rebuildCapabilityEvidence()
     }
 
     fun toggleVpnConnection() {
@@ -170,11 +288,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     if (consentIntent == null) vpnController.beginVerification(config)
                 }
             }
-            updateSecurityScore()
+            rebuildCapabilityEvidence()
         }
     }
 
-    fun onVpnStateChanged(state: WireGuardTunnelState) { if (state is WireGuardTunnelState.Connected) updateSecurityScore() }
+    fun onVpnStateChanged(state: WireGuardTunnelState) {
+        if (state is WireGuardTunnelState.Connected) rebuildCapabilityEvidence()
+    }
 
     fun startDeepSystemScan() {
         if (_isDeepScanning.value) return
@@ -189,8 +309,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
             for ((stepText, progress) in steps) { _deepScanStep.value = stepText; _deepScanProgress.value = progress; kotlinx.coroutines.delay(700) }
             _isDeepScanning.value = false
-            _securityScore.value = 98
-            repository.saveScanLog(ScanLogEntity("Full Deep System Audit", "DEEP_SCAN", "PASSED", 98, "Completed the local Sentinel audit workflow.", "Local heuristic scan completed; no claim of complete device-wide malware coverage."))
+            repository.saveScanLog(ScanLogEntity("Full Deep System Audit", "DEEP_SCAN", "PASSED", _securityScore.value, "Completed the local Sentinel audit workflow.", "Local heuristic scan completed; no claim of complete device-wide malware coverage."))
+            rebuildCapabilityEvidence()
         }
     }
 
@@ -202,6 +322,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _speedTestResult.value = result
             _isTestingSpeed.value = false
             repository.saveScanLog(ScanLogEntity("Wi-Fi Security & Speed Audit", "NETWORK_AUDIT", "WARNING", 0, "Diagnostic data is unverified; no live network measurement is currently implemented.", "UNVERIFIED"))
+            rebuildCapabilityEvidence()
         }
     }
 
@@ -216,6 +337,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _lastThreatResult.value = threat
             _isAiScanning.value = false
             repository.saveScanLog(ScanLogEntity("AI Threat Audit: ${threat.title}", "AI_THREAT", if (threat.severity == ThreatSeverity.SAFE) "PASSED" else "WARNING", 0, threat.description, threat.recommendation))
+            rebuildCapabilityEvidence()
         }
     }
 
@@ -238,6 +360,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _hasSearchedBreaches.value = true
             _breachResults.value = repository.searchBreachData(_darkWebQuery.value)
             _isSearchingBreaches.value = false
+            rebuildCapabilityEvidence()
         }
     }
 
