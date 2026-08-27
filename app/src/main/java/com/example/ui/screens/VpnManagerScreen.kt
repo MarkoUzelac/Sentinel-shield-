@@ -18,8 +18,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -42,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.components.VpnServerCard
 import com.example.ui.theme.CyberCyan
 import com.example.ui.theme.CyberGreen
+import com.example.ui.theme.CyberOrange
 import com.example.ui.theme.DarkBackground
 import com.example.ui.theme.DarkCard
 import com.example.ui.theme.DarkCardBorder
@@ -52,10 +55,15 @@ import com.example.ui.viewmodel.MainViewModel
 import com.example.vpn.WireGuardTunnelState
 
 @Composable
-fun VpnManagerScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
+fun VpnManagerScreen(
+    viewModel: MainViewModel,
+    onImportWireGuardProfile: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val servers by viewModel.vpnServers.collectAsState()
     val selectedServer by viewModel.selectedVpnServer.collectAsState()
     val vpnState by viewModel.vpnState.collectAsState()
+    val isProvisioned by viewModel.isVpnProvisioned.collectAsState()
     val isConnected = vpnState is WireGuardTunnelState.Connected
     val isStarting = vpnState is WireGuardTunnelState.Starting ||
         vpnState is WireGuardTunnelState.AwaitingUserConsent ||
@@ -71,12 +79,58 @@ fun VpnManagerScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
             Text("Connected is shown only after a verified WireGuard peer handshake.", 13.sp, color = TextSecondary)
             Spacer(Modifier.height(4.dp))
             Text(
-                if (viewModel.isVpnProvisioned) "REAL PROFILE PROVISIONED" else "PROFILE NOT PROVISIONED",
+                if (isProvisioned) "REAL PROFILE PROVISIONED" else "PROFILE NOT PROVISIONED",
                 10.sp,
                 FontWeight.Bold,
-                if (viewModel.isVpnProvisioned) CyberGreen else TextMuted,
+                if (isProvisioned) CyberGreen else TextMuted,
                 letterSpacing = 1.sp
             )
+        }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth().testTag("vpn_provisioning_card"),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = DarkCard),
+                border = CardDefaults.outlinedCardBorder().copy(
+                    brush = Brush.linearGradient(listOf(DarkCardBorder, CyberOrange.copy(alpha = .55f)))
+                )
+            ) {
+                Column(Modifier.fillMaxWidth().padding(18.dp)) {
+                    Text("PROVISION REAL VPN", 12.sp, FontWeight.Bold, TextMuted, letterSpacing = 1.sp)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Import a WireGuard .conf profile. The private key stays inside Sentinel Shield app-private storage and is never shown or committed.",
+                        12.sp,
+                        color = TextSecondary
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        Button(
+                            onClick = onImportWireGuardProfile,
+                            colors = ButtonDefaults.buttonColors(containerColor = CyberOrange, contentColor = DarkBackground),
+                            modifier = Modifier.weight(1f).height(46.dp).testTag("btn_import_wireguard_profile"),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.UploadFile, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Import .conf", fontWeight = FontWeight.Bold)
+                        }
+                        if (isProvisioned) {
+                            Button(
+                                onClick = { viewModel.removeWireGuardProfile() },
+                                colors = ButtonDefaults.buttonColors(containerColor = DarkCardBorder, contentColor = TextPrimary),
+                                modifier = Modifier.height(46.dp).testTag("btn_remove_wireguard_profile"),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Default.Delete, contentDescription = null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Remove", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         item {
@@ -107,9 +161,9 @@ fun VpnManagerScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                             is WireGuardTunnelState.Error -> "TUNNEL ERROR"
                             WireGuardTunnelState.Disconnected -> "DISCONNECTED"
                         },
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isConnected) CyberGreen else TextSecondary,
+                        18.sp,
+                        FontWeight.Bold,
+                        if (isConnected) CyberGreen else TextSecondary,
                         letterSpacing = 1.sp
                     )
                     Text(
@@ -119,16 +173,16 @@ fun VpnManagerScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                             is WireGuardTunnelState.AwaitingUserConsent -> "Approve Android VPN permission to continue."
                             is WireGuardTunnelState.Starting -> "Starting the official WireGuard userspace backend."
                             is WireGuardTunnelState.Verifying -> "Waiting for a recent peer handshake (attempt ${state.attempt}/20)."
-                            WireGuardTunnelState.Disconnected -> if (viewModel.isVpnProvisioned) "Ready to start the provisioned WireGuard profile." else "Provision a real WireGuard profile before connecting."
+                            WireGuardTunnelState.Disconnected -> if (isProvisioned) "Ready to start the provisioned WireGuard profile." else "Import a real WireGuard profile before connecting."
                         },
-                        fontSize = 12.sp,
+                        12.sp,
                         color = TextSecondary,
                         modifier = Modifier.padding(top = 4.dp)
                     )
                     Spacer(Modifier.height(20.dp))
                     Button(
                         onClick = { viewModel.toggleVpnConnection() },
-                        enabled = !isStarting && viewModel.isVpnProvisioned,
+                        enabled = !isStarting && isProvisioned,
                         colors = ButtonDefaults.buttonColors(containerColor = if (isConnected) CyberGreen else CyberCyan, contentColor = DarkBackground),
                         shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.fillMaxWidth().height(50.dp).testTag("btn_toggle_vpn")
