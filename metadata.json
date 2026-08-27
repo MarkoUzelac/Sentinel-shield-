@@ -1,6 +1,6 @@
 {
   "name": "Sentinel Shield Pro",
   "description": "Premium Cyber Security & Digital Privacy Shield with AI Threat Detection, Network Security Audit, Speed Test, VPN Tunnel, and Dark Web Monitor.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
