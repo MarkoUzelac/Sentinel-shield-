@@ -12,10 +12,10 @@ sealed interface WireGuardTransportResult {
     data class Failure(val message: String) : WireGuardTransportResult
 }
 
-/** Transport contract kept small so the lifecycle verifier can be tested without Android. */
 interface WireGuardTransport {
     fun start(config: Config): WireGuardTransportResult
     fun stop(): WireGuardTransportResult
+    fun isTunnelUp(): Boolean
     fun latestHandshakeEpochMillis(): Long?
 }
 
@@ -40,13 +40,19 @@ class GoWireGuardTransport(context: Context) : WireGuardTransport {
     }
 
     override fun stop(): WireGuardTransportResult = runCatching {
-        backend.setState(tunnel, Tunnel.State.DOWN, null)
+        if (backend.getState(tunnel) == Tunnel.State.UP) {
+            backend.setState(tunnel, Tunnel.State.DOWN, null)
+        }
         activeConfig = null
         startedAtEpochMillis = 0L
         WireGuardTransportResult.Stopped
     }.getOrElse { error ->
         WireGuardTransportResult.Failure(error.message ?: "WireGuard backend shutdown failed")
     }
+
+    override fun isTunnelUp(): Boolean = runCatching {
+        backend.getState(tunnel) == Tunnel.State.UP
+    }.getOrDefault(false)
 
     override fun latestHandshakeEpochMillis(): Long? {
         val config = activeConfig ?: return null
