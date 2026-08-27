@@ -120,7 +120,7 @@ fun DashboardScreen(
                 )
             },
             key = { it.id.name }
-        ) { item -> CapabilityEvidenceCard(item) }
+        ) { evidenceItem -> CapabilityEvidenceCard(evidenceItem) }
         item {
             Button(
                 onClick = { viewModel.startDeepSystemScan() },
