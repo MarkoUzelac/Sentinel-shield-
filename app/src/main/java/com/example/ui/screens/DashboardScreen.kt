@@ -46,7 +46,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.ThreatSnapshotStore
 import com.example.data.localization.stringRes
 import com.example.data.model.CapabilityEvidenceSnapshot
 import com.example.data.model.CapabilityId
@@ -66,7 +65,7 @@ fun DashboardScreen(viewModel: MainViewModel, onNavigateToAiScanner: () -> Unit,
     val logs by viewModel.scanLogs.collectAsState()
     val securityScore by viewModel.securityScore.collectAsState()
     val evidence by viewModel.capabilityEvidence.collectAsState()
-    val threat by ThreatSnapshotStore.snapshot.collectAsState()
+    val threat by viewModel.threatSnapshot.collectAsState()
     val evidenceSnapshot = remember(evidence) { CapabilityEvidenceSnapshot.from(evidence) }
 
     LazyColumn(modifier = modifier.fillMaxSize().background(skin.bgColor).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
