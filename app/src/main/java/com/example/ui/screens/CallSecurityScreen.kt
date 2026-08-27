@@ -14,45 +14,50 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Cancel
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhoneForwarded
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.localization.stringRes
+import com.example.data.model.CapabilityId
+import com.example.ui.components.CapabilityEvidenceCard
 import com.example.ui.theme.LocalAppSkin
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.example.ui.viewmodel.MainViewModel
 
 private data class MmiCode(val code: String, val title: String, val description: String, val destructive: Boolean = false)
 
 @Composable
-fun CallSecurityScreen(modifier: Modifier = Modifier) {
+fun CallSecurityScreen(
+    viewModel: MainViewModel,
+    modifier: Modifier = Modifier
+) {
     val context = LocalContext.current
     val skin = LocalAppSkin.current
+    val evidence by viewModel.capabilityEvidence.collectAsState()
+    val callEvidence = evidence.firstOrNull { it.id == CapabilityId.CALL_MMI }
     var micMonitor by remember { mutableStateOf(false) }
     var smsProtection by remember { mutableStateOf(true) }
     var silentSmsAlert by remember { mutableStateOf(false) }
@@ -68,6 +73,8 @@ fun CallSecurityScreen(modifier: Modifier = Modifier) {
             Text(stringRes("call_sec_title"), fontSize = 14.sp, color = skin.textMutedColor)
             Spacer(Modifier.height(4.dp))
             Text(stringRes("call_sec_subtitle"), fontSize = 13.sp, color = skin.textSecondaryColor)
+            Spacer(Modifier.height(10.dp))
+            callEvidence?.let { CapabilityEvidenceCard(it) }
         }
         items(codes) { item ->
             Card(colors = CardDefaults.cardColors(containerColor = skin.cardColor), border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(skin.borderColor, if (item.destructive) Color(0xFFFF1744) else skin.primaryColor))), shape = RoundedCornerShape(16.dp)) {
@@ -83,7 +90,7 @@ fun CallSecurityScreen(modifier: Modifier = Modifier) {
                     Spacer(Modifier.height(8.dp))
                     Text(item.description, color = skin.textSecondaryColor, fontSize = 11.sp)
                     Spacer(Modifier.height(10.dp))
-                    Button(onClick = { context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${item.code}"))) }, colors = ButtonDefaults.buttonColors(containerColor = if (item.destructive) Color(0xFFFF1744) else skin.primaryColor, contentColor = Color.Black)) {
+                    Button(onClick = { context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${Uri.encode(item.code)}"))) }, colors = ButtonDefaults.buttonColors(containerColor = if (item.destructive) Color(0xFFFF1744) else skin.primaryColor, contentColor = Color.Black)) {
                         Icon(Icons.Default.Call, null)
                         Spacer(Modifier.width(6.dp))
                         Text("Otvori broj", fontSize = 12.sp)
