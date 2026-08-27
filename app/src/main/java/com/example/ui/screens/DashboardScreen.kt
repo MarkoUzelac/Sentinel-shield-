@@ -49,7 +49,6 @@ import androidx.compose.ui.unit.sp
 import com.example.data.localization.stringRes
 import com.example.data.model.CapabilityEvidenceSnapshot
 import com.example.data.model.CapabilityId
-import com.example.data.model.CapabilityEvidence
 import com.example.ui.components.CapabilityEvidenceCard
 import com.example.ui.components.QuickActionButton
 import com.example.ui.components.ShieldGaugeCard
@@ -94,9 +93,7 @@ fun DashboardScreen(
                 }
             }
         }
-        item {
-            ShieldGaugeCard(score = securityScore, isScanning = isScanning, modifier = Modifier.fillMaxWidth())
-        }
+        item { ShieldGaugeCard(score = securityScore, isScanning = isScanning, modifier = Modifier.fillMaxWidth()) }
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = skin.cardColor),
@@ -123,9 +120,7 @@ fun DashboardScreen(
                 )
             },
             key = { it.id.name }
-        ) { item ->
-            CapabilityEvidenceCard(item)
-        }
+        ) { item -> CapabilityEvidenceCard(item) }
         item {
             Button(
                 onClick = { viewModel.startDeepSystemScan() },
@@ -169,9 +164,7 @@ fun DashboardScreen(
                 QuickActionButton("Dark Web", evidenceSnapshot.statusOf(CapabilityId.DARK_WEB_LOOKUP).name, Icons.Default.Language, skin.primaryColor, onNavigateToDarkWeb, Modifier.weight(1f))
             }
         }
-        item {
-            QuickActionButton("Network Audit", evidenceSnapshot.statusOf(CapabilityId.NETWORK_AUDIT).name, Icons.Default.Security, skin.primaryColor, onNavigateToNetwork, Modifier.fillMaxWidth())
-        }
+        item { QuickActionButton("Network Audit", evidenceSnapshot.statusOf(CapabilityId.NETWORK_AUDIT).name, Icons.Default.Security, skin.primaryColor, onNavigateToNetwork, Modifier.fillMaxWidth()) }
         if (logs.isNotEmpty()) {
             item { Text("SIGURNOSNI DNEVNIK", color = skin.textMutedColor, fontSize = 11.sp, letterSpacing = 1.sp) }
             items(logs.takeLast(5).asReversed(), key = { it.id }) { log ->
@@ -191,6 +184,3 @@ fun DashboardScreen(
         item { Text("Svi statusi dolaze iz jednog Capability / Evidence modela; UI ne pretpostavlja da je zaštita verificirana.", color = skin.textMutedColor, fontSize = 9.sp) }
     }
 }
-
-private fun statusSubtitle(evidence: List<CapabilityEvidence>, id: CapabilityId): String =
-    evidence.firstOrNull { it.id == id }?.status?.name ?: "UNAVAILABLE"
