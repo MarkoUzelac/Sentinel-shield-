@@ -31,6 +31,7 @@ import com.example.data.model.VpnServer
 import com.example.vpn.WireGuardProfileStore
 import com.example.vpn.WireGuardTunnelController
 import com.example.vpn.WireGuardTunnelState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -39,6 +40,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: SecurityRepository
@@ -134,22 +136,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
-
-        viewModelScope.launch {
-            vpnController.state.collect { rebuildCapabilityEvidence() }
-        }
+        viewModelScope.launch { vpnController.state.collect { rebuildCapabilityEvidence() } }
         rebuildCapabilityEvidence()
     }
 
     private fun readRadarObservation(): RadarObservation {
-        val permissionGranted = ContextCompat.checkSelfPermission(
-            getApplication<Application>(),
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
+        val permissionGranted = ContextCompat.checkSelfPermission(getApplication<Application>(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         val telephonyAvailable = telephonyManager != null && getApplication<Application>().packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)
-        val cellCount = if (permissionGranted && telephonyAvailable) {
-            runCatching { telephonyManager?.allCellInfo?.size ?: 0 }.getOrDefault(0)
-        } else 0
+        val cellCount = if (permissionGranted && telephonyAvailable) runCatching { telephonyManager?.allCellInfo?.size ?: 0 }.getOrDefault(0) else 0
         return RadarObservation(permissionGranted, cellCount, telephonyAvailable)
     }
 
@@ -176,42 +170,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             CapabilityEvidenceEngine.radar(_radarObservation.value, evidenceClock),
             CapabilityEvidenceEngine.callSecurity(_callSecurityObservation.value, evidenceClock),
             CapabilityEvidenceEngine.network(_networkObservation.value, evidenceClock),
-            CapabilityEvidenceEngine.localSetting(
-                CapabilityId.PHISHING_PROTECTION, "Phishing protection", _isPhishingProtectionActive.value,
-                "Sentinel local protection setting", "Lokalna phishing zaštita je uključena, ali aktivna učinkovitost nije neovisno verificirana.", evidenceClock
-            ),
-            CapabilityEvidenceEngine.localSetting(
-                CapabilityId.AD_TELEMETRY_FILTER, "Ad/telemetry filter", _isAdBlockActive.value,
-                "Sentinel local protection setting", "Lokalni filter je uključen; njegova stvarna pokrivenost nije neovisno verificirana.", evidenceClock
-            ),
-            CapabilityEvidenceEngine.localSetting(
-                CapabilityId.REALTIME_SHIELD, "Background shield", _isRealtimeShieldActive.value,
-                "Sentinel local protection setting", "Lokalni background shield je uključen; to samo po sebi nije dokaz potpune zaštite uređaja.", evidenceClock
-            ),
-            CapabilityEvidence(
-                CapabilityId.AI_THREAT_ANALYSIS,
-                "AI threat analysis",
-                if (_lastThreatResult.value != null) CapabilityStatus.UNVERIFIED else CapabilityStatus.UNAVAILABLE,
-                "Sentinel AI repository",
-                if (_lastThreatResult.value != null) "AI analiza je izvršena, ali rezultat nije neovisni dokaz kompromitiranosti uređaja." else "Nema izvršene AI analize.",
-                provenance = null
-            ),
-            CapabilityEvidence(
-                CapabilityId.DARK_WEB_LOOKUP,
-                "Dark Web lookup",
-                if (_hasSearchedBreaches.value) CapabilityStatus.UNVERIFIED else CapabilityStatus.UNAVAILABLE,
-                "SecurityRepository/HIBP",
-                if (_hasSearchedBreaches.value) "Rezultat breach pretrage postoji, ali ne predstavlja potpuni dark-web crawl." else "Nema izvršene pretrage.",
-                provenance = null
-            ),
-            CapabilityEvidence(
-                CapabilityId.LEGAL_GUIDANCE,
-                "Legal guidance",
-                CapabilityStatus.VERIFIED,
-                "Bundled jurisdiction dataset",
-                "Prikazani je sadržaj informativni vodič, a ne pravno zastupanje.",
-                provenance = null
-            )
+            CapabilityEvidenceEngine.localSetting(CapabilityId.PHISHING_PROTECTION, "Phishing protection", _isPhishingProtectionActive.value, "Sentinel local protection setting", "Lokalna phishing zaštita je uključena, ali aktivna učinkovitost nije neovisno verificirana.", evidenceClock),
+            CapabilityEvidenceEngine.localSetting(CapabilityId.AD_TELEMETRY_FILTER, "Ad/telemetry filter", _isAdBlockActive.value, "Sentinel local protection setting", "Lokalni filter je uključen; njegova stvarna pokrivenost nije neovisno verificirana.", evidenceClock),
+            CapabilityEvidenceEngine.localSetting(CapabilityId.REALTIME_SHIELD, "Background shield", _isRealtimeShieldActive.value, "Sentinel local protection setting", "Lokalni background shield je uključen; to samo po sebi nije dokaz potpune zaštite uređaja.", evidenceClock),
+            CapabilityEvidence(CapabilityId.AI_THREAT_ANALYSIS, "AI threat analysis", if (_lastThreatResult.value != null) CapabilityStatus.UNVERIFIED else CapabilityStatus.UNAVAILABLE, "Sentinel AI repository", if (_lastThreatResult.value != null) "AI analiza je izvršena, ali rezultat nije neovisni dokaz kompromitiranosti uređaja." else "Nema izvršene AI analize.", provenance = null),
+            CapabilityEvidence(CapabilityId.DARK_WEB_LOOKUP, "Dark Web lookup", if (_hasSearchedBreaches.value) CapabilityStatus.UNVERIFIED else CapabilityStatus.UNAVAILABLE, "SecurityRepository/HIBP", if (_hasSearchedBreaches.value) "Rezultat breach pretrage postoji, ali ne predstavlja potpuni dark-web crawl." else "Nema izvršene pretrage.", provenance = null),
+            CapabilityEvidence(CapabilityId.LEGAL_GUIDANCE, "Legal guidance", CapabilityStatus.VERIFIED, "Bundled jurisdiction dataset", "Prikazani je sadržaj informativni vodič, a ne pravno zastupanje.", provenance = null)
         )
         _capabilityEvidence.value = evidence
         updateSecurityScoreFromEvidence(evidence)
@@ -220,7 +184,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun updateSecurityScoreFromEvidence(evidence: List<CapabilityEvidence>) {
         if (evidence.isEmpty()) return
         val weights = mapOf(CapabilityStatus.VERIFIED to 1.0, CapabilityStatus.UNVERIFIED to 0.55, CapabilityStatus.UNAVAILABLE to 0.0)
-        _securityScore.value = (evidence.map { weights.getValue(it.effectiveStatus(evidenceClock.nowEpochMillis())) }.average() * 100.0).toInt().coerceIn(0, 100)
+        val now = evidenceClock.nowEpochMillis()
+        _securityScore.value = (evidence.map { weights.getValue(it.effectiveStatus(now)) }.average() * 100.0).toInt().coerceIn(0, 100)
     }
 
     fun toggleRealtimeShield(active: Boolean) { _isRealtimeShieldActive.value = active; rebuildCapabilityEvidence() }
@@ -229,18 +194,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun prepareVpnConsent(): Intent? {
         val intent = vpnController.prepare()
-        if (intent != null) {
-            vpnController.markAwaitingConsent()
-            _vpnConsentRequest.tryEmit(intent)
-        }
+        if (intent != null) { vpnController.markAwaitingConsent(); _vpnConsentRequest.tryEmit(intent) }
         return intent
     }
 
     fun onVpnConsentGranted() {
-        val config = runCatching { wireGuardProfileStore.load() }.getOrElse {
-            vpnController.markError("WireGuard profile is not provisioned")
-            return
-        }
+        val config = runCatching { wireGuardProfileStore.load() }.getOrElse { vpnController.markError("WireGuard profile is not provisioned"); return }
         vpnController.beginVerification(config)
     }
 
@@ -248,12 +207,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun importWireGuardProfile(profileText: String): Result<Unit> {
         val result = wireGuardProfileStore.importProfile(profileText)
-        if (result.isSuccess) {
-            _isVpnProvisioned.value = true
-            vpnController.markError("WireGuard profile imported; ready to connect")
-        } else {
-            vpnController.markError(result.exceptionOrNull()?.message ?: "Invalid WireGuard profile")
-        }
+        if (result.isSuccess) { _isVpnProvisioned.value = true; vpnController.markError("WireGuard profile imported; ready to connect") }
+        else vpnController.markError(result.exceptionOrNull()?.message ?: "Invalid WireGuard profile")
         rebuildCapabilityEvidence()
         return result
     }
@@ -261,10 +216,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun reportVpnError(message: String) = vpnController.markError(message)
 
     fun removeWireGuardProfile() {
-        vpnController.stop()
-        wireGuardProfileStore.clear()
-        _isVpnProvisioned.value = false
-        rebuildCapabilityEvidence()
+        vpnController.stop(); wireGuardProfileStore.clear(); _isVpnProvisioned.value = false; rebuildCapabilityEvidence()
     }
 
     fun selectVpnServer(server: VpnServer) {
@@ -277,14 +229,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             when (vpnController.state.value) {
                 is WireGuardTunnelState.Connected -> vpnController.stop()
-                is WireGuardTunnelState.Starting,
-                is WireGuardTunnelState.Verifying,
-                is WireGuardTunnelState.AwaitingUserConsent -> Unit
+                is WireGuardTunnelState.Starting, is WireGuardTunnelState.Verifying, is WireGuardTunnelState.AwaitingUserConsent -> Unit
                 else -> {
-                    val config = runCatching { wireGuardProfileStore.load() }.getOrElse {
-                        vpnController.markError("Import a WireGuard profile before connecting")
-                        return@launch
-                    }
+                    val config = runCatching { wireGuardProfileStore.load() }.getOrElse { vpnController.markError("Import a WireGuard profile before connecting"); return@launch }
                     val consentIntent = prepareVpnConsent()
                     if (consentIntent == null) vpnController.beginVerification(config)
                 }
@@ -293,21 +240,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun onVpnStateChanged(state: WireGuardTunnelState) {
-        if (state is WireGuardTunnelState.Connected) rebuildCapabilityEvidence()
-    }
+    fun onVpnStateChanged(state: WireGuardTunnelState) { if (state is WireGuardTunnelState.Connected) rebuildCapabilityEvidence() }
 
     fun startDeepSystemScan() {
         if (_isDeepScanning.value) return
         viewModelScope.launch {
             _isDeepScanning.value = true
-            val steps = listOf(
-                "Checking System Integrity & Root Sandbox..." to 0.2f,
-                "Auditing App Permissions & Sensitive APIs..." to 0.45f,
-                "Inspecting Network Sockets & DNS Resolvers..." to 0.7f,
-                "Evaluating SSL Certificates & Local Storage..." to 0.9f,
-                "Scan Completed!" to 1.0f
-            )
+            val steps = listOf("Checking System Integrity & Root Sandbox..." to 0.2f, "Auditing App Permissions & Sensitive APIs..." to 0.45f, "Inspecting Network Sockets & DNS Resolvers..." to 0.7f, "Evaluating SSL Certificates & Local Storage..." to 0.9f, "Scan Completed!" to 1.0f)
             for ((stepText, progress) in steps) { _deepScanStep.value = stepText; _deepScanProgress.value = progress; kotlinx.coroutines.delay(700) }
             _isDeepScanning.value = false
             repository.saveScanLog(ScanLogEntity(title = "Full Deep System Audit", scanType = "DEEP_SCAN", status = "PASSED", score = _securityScore.value, summary = "Completed the local Sentinel audit workflow.", detailsJson = "Local heuristic scan completed; no claim of complete device-wide malware coverage."))
@@ -319,11 +258,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (_isTestingSpeed.value) return
         viewModelScope.launch {
             _isTestingSpeed.value = true
-            val result = repository.runNetworkSecurityAudit()
-            _speedTestResult.value = result
-            _isTestingSpeed.value = false
-            repository.saveScanLog(ScanLogEntity(title = "Wi-Fi Security & Speed Audit", scanType = "NETWORK_AUDIT", status = "WARNING", score = 0, summary = "Runtime network state and HTTPS probe are available; full security proof is not claimed.", detailsJson = "UNVERIFIED"))
-            rebuildCapabilityEvidence()
+            try {
+                _speedTestResult.value = repository.runNetworkSecurityAudit()
+                repository.saveScanLog(ScanLogEntity(title = "Wi-Fi Security & Speed Audit", scanType = "NETWORK_AUDIT", status = "WARNING", score = 0, summary = "Runtime network state and HTTPS probe are available; full security proof is not claimed.", detailsJson = "UNVERIFIED"))
+            } finally { _isTestingSpeed.value = false; rebuildCapabilityEvidence() }
         }
     }
 
@@ -334,11 +272,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (input.isBlank()) return
         viewModelScope.launch {
             _isAiScanning.value = true
-            val threat = repository.analyzeSecurityThreatWithAi(input, _aiScanCategory.value)
-            _lastThreatResult.value = threat
-            _isAiScanning.value = false
-            repository.saveScanLog(ScanLogEntity(title = "AI Threat Audit: ${threat.title}", scanType = "AI_THREAT", status = if (threat.severity == ThreatSeverity.SAFE) "PASSED" else "WARNING", score = 0, summary = threat.description, detailsJson = threat.recommendation))
-            rebuildCapabilityEvidence()
+            try {
+                val threat = repository.analyzeSecurityThreatWithAi(input, _aiScanCategory.value)
+                _lastThreatResult.value = threat
+                repository.saveScanLog(ScanLogEntity(title = "AI Threat Audit: ${threat.title}", scanType = "AI_THREAT", status = if (threat.severity == ThreatSeverity.SAFE) "PASSED" else "WARNING", score = 0, summary = threat.description, detailsJson = threat.recommendation))
+            } finally { _isAiScanning.value = false; rebuildCapabilityEvidence() }
         }
     }
 
@@ -347,9 +285,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _chatMessages.value = _chatMessages.value + ("user" to message)
         viewModelScope.launch {
             _isChatThinking.value = true
-            val response = repository.getSentinelAiChatResponse(message, _chatMessages.value.joinToString("\n") { "${it.first}: ${it.second}" })
-            _chatMessages.value = _chatMessages.value + ("sentinel" to response)
-            _isChatThinking.value = false
+            try {
+                val response = repository.getSentinelAiChatResponse(message, _chatMessages.value.joinToString("\n") { "${it.first}: ${it.second}" })
+                _chatMessages.value = _chatMessages.value + ("sentinel" to response)
+            } finally { _isChatThinking.value = false }
         }
     }
 
@@ -360,10 +299,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (_isSearchingBreaches.value || _darkWebQuery.value.isBlank()) return
         viewModelScope.launch {
             _isSearchingBreaches.value = true
-            _breachResults.value = withContext(kotlinx.coroutines.Dispatchers.IO) { repository.searchBreachData(_darkWebQuery.value) }
-            _hasSearchedBreaches.value = true
-            _isSearchingBreaches.value = false
-            rebuildCapabilityEvidence()
+            try { _breachResults.value = withContext(Dispatchers.IO) { repository.searchBreachData(_darkWebQuery.value) }; _hasSearchedBreaches.value = true }
+            finally { _isSearchingBreaches.value = false; rebuildCapabilityEvidence() }
         }
     }
 
