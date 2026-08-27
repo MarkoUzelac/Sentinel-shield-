@@ -25,6 +25,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -56,16 +57,18 @@ fun VpnManagerScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
     val selectedServer by viewModel.selectedVpnServer.collectAsState()
     val vpnState by viewModel.vpnState.collectAsState()
     val isConnected = vpnState is WireGuardTunnelState.Connected
-    val isStarting = vpnState is WireGuardTunnelState.Starting || vpnState is WireGuardTunnelState.AwaitingUserConsent
+    val isStarting = vpnState is WireGuardTunnelState.Starting ||
+        vpnState is WireGuardTunnelState.AwaitingUserConsent ||
+        vpnState is WireGuardTunnelState.Verifying
 
     LazyColumn(
         modifier = modifier.fillMaxSize().background(DarkBackground).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Text("WIREGUARD VPN LIFECYCLE", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 1.sp)
+            Text("WIREGUARD VPN LIFECYCLE", 12.sp, FontWeight.Bold, TextMuted, letterSpacing = 1.sp)
             Spacer(Modifier.height(4.dp))
-            Text("Tunnel state is reported as connected only after transport verification.", fontSize = 13.sp, color = TextSecondary)
+            Text("Connected is shown only after a verified WireGuard handshake.", 13.sp, color = TextSecondary)
         }
 
         item {
@@ -73,7 +76,9 @@ fun VpnManagerScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxWidth().testTag("vpn_status_card"),
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(containerColor = DarkCard),
-                border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(DarkCardBorder, if (isConnected) CyberGreen else CyberCyan)))
+                border = CardDefaults.outlinedCardBorder().copy(
+                    brush = Brush.linearGradient(listOf(DarkCardBorder, if (isConnected) CyberGreen else CyberCyan))
+                )
             ) {
                 Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(
@@ -89,6 +94,7 @@ fun VpnManagerScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                         when (vpnState) {
                             is WireGuardTunnelState.Connected -> "TUNNEL VERIFIED"
                             is WireGuardTunnelState.Starting -> "STARTING TUNNEL"
+                            is WireGuardTunnelState.Verifying -> "VERIFYING HANDSHAKE"
                             is WireGuardTunnelState.AwaitingUserConsent -> "AWAITING VPN CONSENT"
                             is WireGuardTunnelState.Error -> "TUNNEL ERROR"
                             WireGuardTunnelState.Disconnected -> "DISCONNECTED"
@@ -100,10 +106,11 @@ fun VpnManagerScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                     )
                     Text(
                         when (val state = vpnState) {
-                            is WireGuardTunnelState.Connected -> "Verified encrypted transport is active."
+                            is WireGuardTunnelState.Connected -> "Encrypted transport verified. Handshake: ${state.latestHandshakeEpochSeconds}"
                             is WireGuardTunnelState.Error -> state.message
                             is WireGuardTunnelState.AwaitingUserConsent -> "Approve Android VPN permission to continue."
-                            is WireGuardTunnelState.Starting -> "Platform VPN service started; WireGuard handshake still required."
+                            is WireGuardTunnelState.Starting -> "Starting WireGuard transport."
+                            is WireGuardTunnelState.Verifying -> "Waiting for a recent peer handshake (attempt ${state.attempt}/10)."
                             WireGuardTunnelState.Disconnected -> "No verified VPN transport is active."
                         },
                         fontSize = 12.sp,
@@ -118,6 +125,10 @@ fun VpnManagerScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                         shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.fillMaxWidth().height(50.dp).testTag("btn_toggle_vpn")
                     ) {
+                        if (isStarting) {
+                            CircularProgressIndicator(Modifier.size(18.dp), color = DarkBackground, strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                        }
                         Text(if (isConnected) "Disconnect VPN" else "Start VPN Lifecycle", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     }
                 }
@@ -127,14 +138,13 @@ fun VpnManagerScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 VpnSpecCard("Protocol", selectedServer?.protocol ?: "WireGuard", Icons.Default.Lock, Modifier.weight(1f))
-                VpnSpecCard("Endpoint", if (selectedServer?.ipAddress.isNullOrBlank()) "Not provisioned" else "Provisioned", Icons.Default.Public, Modifier.weight(1f))
+                VpnSpecCard("Endpoint", if (selectedServer?.ipAddress.isNullOrBlank()) "Not provisioned" else "Metadata only", Icons.Default.Public, Modifier.weight(1f))
             }
         }
 
-        item { Text("SERVER LOCATIONS (${servers.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 1.sp, modifier = Modifier.padding(top = 8.dp)) }
-
+        item { Text("SERVER LOCATIONS (${servers.size})", 12.sp, FontWeight.Bold, TextMuted, letterSpacing = 1.sp, modifier = Modifier.padding(top = 8.dp)) }
         items(servers, key = { it.id }) { server ->
-            VpnServerCard(server = server, isSelected = selectedServer?.id == server.id, isConnected = isConnected && selectedServer?.id == server.id, onSelect = { viewModel.selectVpnServer(server) })
+            VpnServerCard(server, selectedServer?.id == server.id, isConnected && selectedServer?.id == server.id, onSelect = { viewModel.selectVpnServer(server) })
         }
     }
 }
@@ -145,10 +155,7 @@ fun VpnSpecCard(title: String, value: String, icon: androidx.compose.ui.graphics
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, tint = CyberCyan, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
-            Column {
-                Text(title, fontSize = 10.sp, color = TextMuted)
-                Text(value, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-            }
+            Column { Text(title, 10.sp, color = TextMuted); Text(value, 12.sp, FontWeight.Bold, color = TextPrimary) }
         }
     }
 }
