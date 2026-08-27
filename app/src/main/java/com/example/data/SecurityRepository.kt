@@ -10,7 +10,6 @@ import com.example.data.model.ThreatItem
 import com.example.data.model.ThreatSeverity
 import com.example.data.model.VpnServer
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -19,6 +18,8 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URI
 import java.util.concurrent.TimeUnit
 
 class SecurityRepository(private val scanLogDao: ScanLogDao) {
@@ -54,6 +55,10 @@ class SecurityRepository(private val scanLogDao: ScanLogDao) {
 
     private fun getGeminiApiKey(): String = runCatching {
         BuildConfig::class.java.getField("GEMINI_API_KEY").get(null) as? String ?: ""
+    }.getOrDefault("")
+
+    private fun getHibpApiKey(): String = runCatching {
+        BuildConfig::class.java.getField("HIBP_API_KEY").get(null) as? String ?: ""
     }.getOrDefault("")
 
     suspend fun analyzeSecurityThreatWithAi(inputContent: String, scanCategory: String): ThreatItem = withContext(Dispatchers.IO) {
@@ -96,7 +101,6 @@ class SecurityRepository(private val scanLogDao: ScanLogDao) {
                     }
                 }
             } catch (_: Exception) {
-                // Continue with local heuristic fallback.
             }
         }
 
@@ -141,18 +145,122 @@ class SecurityRepository(private val scanLogDao: ScanLogDao) {
         }
     }
 
-    /** Demo diagnostic fixture; intentionally not presented as a live network measurement. */
+    /**
+     * Performs a real HTTPS reachability/latency probe. It intentionally does not fabricate
+     * throughput, public-IP or DNS-security values that this repository cannot independently verify.
+     */
     suspend fun runNetworkSecurityAudit(): NetworkSpeedResult = withContext(Dispatchers.IO) {
-        delay(300)
-        NetworkSpeedResult(0.0, 0.0, 0.0, 0.0, "UNVERIFIED_NETWORK", "UNVERIFIED", false, "UNVERIFIED")
+        val probeUrl = "https://www.google.com/generate_204"
+        val startNanos = System.nanoTime()
+        val request = Request.Builder()
+            .url(probeUrl)
+            .get()
+            .header("Cache-Control", "no-cache")
+            .build()
+
+        val result = runCatching {
+            okHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful && response.code != 204) {
+                    error("HTTPS probe failed with HTTP ${response.code}")
+                }
+                val latencyMs = (System.nanoTime() - startNanos) / 1_000_000.0
+                latencyMs to response.handshake?.tlsVersion?.javaName
+            }
+        }
+
+        result.fold(
+            onSuccess = { (latencyMs, tlsVersion) ->
+                NetworkSpeedResult(
+                    pingMs = latencyMs,
+                    downloadMbps = 0.0,
+                    uploadMbps = 0.0,
+                    jitterMs = 0.0,
+                    wifiSsid = "NOT_COLLECTED",
+                    securityEncryption = tlsVersion ?: "TLS",
+                    isDnsSecure = false,
+                    publicIp = "NOT_COLLECTED"
+                )
+            },
+            onFailure = { throwable ->
+                NetworkSpeedResult(
+                    pingMs = -1.0,
+                    downloadMbps = 0.0,
+                    uploadMbps = 0.0,
+                    jitterMs = 0.0,
+                    wifiSsid = "UNAVAILABLE",
+                    securityEncryption = "UNVERIFIED",
+                    isDnsSecure = false,
+                    publicIp = "UNAVAILABLE"
+                )
+            }
+        )
     }
 
-    /** Demo-only records; no live breach feed is queried. */
-    fun checkDarkWebBreaches(query: String): List<BreachRecord> = if (query.trim().isBlank()) emptyList() else listOf(
-        BreachRecord("demo_01", "DEMO_RECORD", "N/A", listOf("Demo Data"), "UNVERIFIED", "Synthetic test data only; no live breach source was queried.")
-    )
+    /**
+     * Synchronous HIBP account lookup. Callers should invoke this from a coroutine/IO context.
+     * No API key or provider response means no synthetic breach record is returned.
+     */
+    fun checkDarkWebBreaches(query: String): List<BreachRecord> {
+        val account = query.trim()
+        val apiKey = getHibpApiKey()
+        if (account.isBlank() || apiKey.isBlank() || apiKey == "MY_HIBP_API_KEY") return emptyList()
+
+        val request = Request.Builder()
+            .url("https://haveibeenpwned.com/api/v3/breachedaccount/${java.net.URLEncoder.encode(account, Charsets.UTF_8.name())}?truncateResponse=false")
+            .header("hibp-api-key", apiKey)
+            .header("user-agent", "Sentinel-Shield/${BuildConfig.VERSION_NAME}")
+            .get()
+            .build()
+
+        return runCatching {
+            okHttpClient.newCall(request).execute().use { response ->
+                when {
+                    response.code == HttpURLConnection.HTTP_NOT_FOUND -> emptyList()
+                    response.code == HttpURLConnection.HTTP_UNAUTHORIZED || response.code == HttpURLConnection.HTTP_FORBIDDEN -> emptyList()
+                    !response.isSuccessful -> emptyList()
+                    else -> {
+                        val body = response.body?.string().orEmpty()
+                        val records = JSONArray(body)
+                        buildList(records.length()) {
+                            for (i in 0 until records.length()) {
+                                val breach = records.optJSONObject(i) ?: continue
+                                val dataClasses = breach.optJSONArray("DataClasses")?.let { array ->
+                                    buildList(array.length()) { index -> add(array.optString(index)) }
+                                }.orEmpty()
+                                add(
+                                    BreachRecord(
+                                        id = "hibp_${breach.optString("Name", i.toString())}",
+                                        domain = breach.optString("Domain", "N/A"),
+                                        breachDate = breach.optString("BreachDate", "N/A"),
+                                        compromisedFields = dataClasses,
+                                        riskLevel = riskFor(dataClasses),
+                                        description = breach.optString("Title", "Have I Been Pwned breach record")
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
 
     fun searchBreachData(query: String): List<BreachRecord> = checkDarkWebBreaches(query)
+
+    private fun riskFor(fields: List<String>): String {
+        val sensitive = fields.any {
+            val normalized = it.lowercase()
+            normalized.contains("password") ||
+                normalized.contains("credit") ||
+                normalized.contains("authentication") ||
+                normalized.contains("social")
+        }
+        return when {
+            sensitive -> "HIGH"
+            fields.isNotEmpty() -> "MEDIUM"
+            else -> "LOW"
+        }
+    }
 
     private data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 }
