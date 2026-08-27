@@ -52,6 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.CapabilityEvidence
+import com.example.data.model.CapabilityEvidenceSnapshot
 import com.example.data.model.CapabilityId
 import com.example.ui.components.CapabilityModuleHeader
 import com.example.ui.screens.AiScannerScreen
@@ -119,6 +120,7 @@ fun SentinelShieldApp(viewModel: MainViewModel, onImportWireGuardProfile: () -> 
     var secondary by remember { mutableStateOf<SecondaryScreen?>(null) }
     val tabs = SentinelTab.values()
     val evidence by viewModel.capabilityEvidence.collectAsState()
+    val evidenceSnapshot = remember(evidence) { CapabilityEvidenceSnapshot.from(evidence) }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -157,9 +159,9 @@ fun SentinelShieldApp(viewModel: MainViewModel, onImportWireGuardProfile: () -> 
             }
             Box(Modifier.weight(1f)) {
                 when {
-                    secondary == SecondaryScreen.AI -> EvidenceWrappedScreen(evidence, CapabilityId.AI_THREAT_ANALYSIS) { AiScannerScreen(viewModel) }
-                    secondary == SecondaryScreen.NETWORK -> EvidenceWrappedScreen(evidence, CapabilityId.NETWORK_AUDIT) { NetworkSpeedScreen(viewModel) }
-                    secondary == SecondaryScreen.DARK_WEB -> EvidenceWrappedScreen(evidence, CapabilityId.DARK_WEB_LOOKUP) { DarkWebMonitorScreen(viewModel) }
+                    secondary == SecondaryScreen.AI -> EvidenceWrappedScreen(evidenceSnapshot, CapabilityId.AI_THREAT_ANALYSIS) { AiScannerScreen(viewModel) }
+                    secondary == SecondaryScreen.NETWORK -> EvidenceWrappedScreen(evidenceSnapshot, CapabilityId.NETWORK_AUDIT) { NetworkSpeedScreen(viewModel) }
+                    secondary == SecondaryScreen.DARK_WEB -> EvidenceWrappedScreen(evidenceSnapshot, CapabilityId.DARK_WEB_LOOKUP) { DarkWebMonitorScreen(viewModel) }
                     else -> when (selectedTab) {
                         0 -> DashboardScreen(
                             viewModel = viewModel,
@@ -174,7 +176,7 @@ fun SentinelShieldApp(viewModel: MainViewModel, onImportWireGuardProfile: () -> 
                         1 -> ImsiRadarScreen(viewModel)
                         2 -> VpnManagerScreen(viewModel, onImportWireGuardProfile)
                         3 -> CallSecurityScreen(viewModel)
-                        4 -> EvidenceWrappedScreen(evidence, CapabilityId.LEGAL_GUIDANCE) { LegalProtectionScreen() }
+                        4 -> EvidenceWrappedScreen(evidenceSnapshot, CapabilityId.LEGAL_GUIDANCE) { LegalProtectionScreen() }
                         5 -> SettingsScreen()
                     }
                 }
@@ -185,12 +187,12 @@ fun SentinelShieldApp(viewModel: MainViewModel, onImportWireGuardProfile: () -> 
 
 @Composable
 private fun EvidenceWrappedScreen(
-    evidence: List<CapabilityEvidence>,
+    evidence: CapabilityEvidenceSnapshot,
     capabilityId: CapabilityId,
     content: @Composable () -> Unit
 ) {
     Column(Modifier.fillMaxSize().padding(horizontal = 10.dp)) {
-        CapabilityModuleHeader(evidence.firstOrNull { it.id == capabilityId })
+        CapabilityModuleHeader(evidence.get(capabilityId))
         Box(Modifier.weight(1f)) {
             content()
         }
