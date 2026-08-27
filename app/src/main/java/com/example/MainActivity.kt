@@ -1,10 +1,14 @@
 package com.example
 
+import android.app.Activity
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -26,6 +30,8 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -38,7 +44,6 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.screens.AiScannerScreen
 import com.example.ui.screens.DarkWebMonitorScreen
 import com.example.ui.screens.DashboardScreen
-import com.example.ui.screens.JurisdictionScreen
 import com.example.ui.screens.NetworkSpeedScreen
 import com.example.ui.screens.SubscriptionScreen
 import com.example.ui.screens.VpnManagerScreen
@@ -47,18 +52,50 @@ import com.example.ui.theme.DarkBackground
 import com.example.ui.theme.DarkCard
 import com.example.ui.theme.SentinelShieldTheme
 import com.example.ui.theme.TextMuted
-import com.example.ui.theme.TextPrimary
 import com.example.ui.viewmodel.MainViewModel
 
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
+    private val vpnConsentLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            viewModel.onVpnConsentGranted()
+        } else {
+            viewModel.onVpnConsentDenied()
+        }
+    }
+
+    private val wireGuardProfileLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    ?: error("Could not read selected WireGuard profile")
+            }.onSuccess { text ->
+                viewModel.importWireGuardProfile(text)
+            }.onFailure { error ->
+                viewModel.reportVpnError(error.message ?: "Could not import WireGuard profile")
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        lifecycleScope.launch {
+            viewModel.vpnConsentRequest.collect { intent ->
+                vpnConsentLauncher.launch(intent)
+            }
+        }
         setContent {
             SentinelShieldTheme {
-                SentinelShieldApp(viewModel = viewModel)
+                SentinelShieldApp(
+                    viewModel = viewModel,
+                    onImportWireGuardProfile = { wireGuardProfileLauncher.launch(arrayOf("application/octet-stream", "text/plain", "*/*")) }
+                )
             }
         }
     }
@@ -74,9 +111,17 @@ enum class SentinelTab(val title: String, val icon: ImageVector, val tag: String
 }
 
 @Composable
-fun SentinelShieldApp(viewModel: MainViewModel) {
+fun SentinelShieldApp(
+    viewModel: MainViewModel,
+    onImportWireGuardProfile: () -> Unit = {}
+) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = SentinelTab.values()
+    val vpnState by viewModel.vpnState.collectAsState()
+
+    LaunchedEffect(vpnState) {
+        viewModel.onVpnStateChanged(vpnState)
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -92,12 +137,7 @@ fun SentinelShieldApp(viewModel: MainViewModel) {
                     NavigationBarItem(
                         selected = selectedTab == index,
                         onClick = { selectedTab = index },
-                        icon = {
-                            Icon(
-                                imageVector = tab.icon,
-                                contentDescription = tab.title
-                            )
-                        },
+                        icon = { Icon(imageVector = tab.icon, contentDescription = tab.title) },
                         label = {
                             Text(
                                 text = tab.title,
@@ -134,7 +174,7 @@ fun SentinelShieldApp(viewModel: MainViewModel) {
                 )
                 1 -> AiScannerScreen(viewModel = viewModel)
                 2 -> NetworkSpeedScreen(viewModel = viewModel)
-                3 -> VpnManagerScreen(viewModel = viewModel)
+                3 -> VpnManagerScreen(viewModel = viewModel, onImportWireGuardProfile = onImportWireGuardProfile)
                 4 -> DarkWebMonitorScreen(viewModel = viewModel)
                 5 -> SubscriptionScreen(viewModel = viewModel)
             }
