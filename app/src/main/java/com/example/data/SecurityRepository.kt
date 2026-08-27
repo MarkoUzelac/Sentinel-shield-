@@ -60,12 +60,7 @@ class SecurityRepository(private val scanLogDao: ScanLogDao) {
         val apiKey = getGeminiApiKey()
         if (apiKey.isNotBlank() && apiKey != "MY_GEMINI_API_KEY") {
             try {
-                val prompt = """
-                    Analyze the target for cyber threats, phishing or privacy risks.
-                    Target: "$inputContent"
-                    Category: "$scanCategory"
-                    Return strict JSON with title, severity, description and recommendation.
-                """.trimIndent()
+                val prompt = "Analyze the target for cyber threats, phishing or privacy risks. Target: \"$inputContent\" Category: \"$scanCategory\" Return strict JSON with title, severity, description and recommendation."
                 val payload = JSONObject().apply {
                     put("contents", JSONArray().put(JSONObject().put("parts", JSONArray().put(JSONObject().put("text", prompt)))))
                 }
@@ -76,8 +71,7 @@ class SecurityRepository(private val scanLogDao: ScanLogDao) {
                 okHttpClient.newCall(request).execute().use { response ->
                     val body = response.body?.string()
                     if (response.isSuccessful && body != null) {
-                        val parts = JSONObject(body).optJSONArray("candidates")
-                            ?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
+                        val parts = JSONObject(body).optJSONArray("candidates")?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
                         val text = parts?.optJSONObject(0)?.optString("text", "") ?: ""
                         val start = text.indexOf('{')
                         val end = text.lastIndexOf('}')
@@ -108,18 +102,13 @@ class SecurityRepository(private val scanLogDao: ScanLogDao) {
 
         val lower = inputContent.lowercase()
         val quad = when {
-            "http://" in lower || ("login" in lower && "verify" in lower) || "bit.ly" in lower ->
-                Quad(ThreatSeverity.HIGH, "Suspicious URL / Phishing Risk", "The input matches common phishing indicators.", "Do not submit credentials or payment information.")
-            "apk" in lower || "download" in lower || "mod" in lower ->
-                Quad(ThreatSeverity.CRITICAL, "Untrusted Sideload Application", "The input suggests installation from a third-party package source.", "Install apps only from trusted sources and verify signatures.")
-            "password" in lower || "123456" in lower || "admin" in lower ->
-                Quad(ThreatSeverity.MEDIUM, "Weak Credential Pattern", "The input contains a commonly targeted credential pattern.", "Use a unique long password and phishing-resistant MFA.")
-            "camera" in lower || "microphone" in lower || "location" in lower ->
-                Quad(ThreatSeverity.LOW, "Privacy-Sensitive Permission", "The input references sensitive device permissions.", "Review whether the permission is required and minimize access.")
-            else ->
-                Quad(ThreatSeverity.SAFE, "No Local Signature Matched", "No known local heuristic signature matched this input.", "A clean heuristic result is not proof of safety.")
+            "http://" in lower || ("login" in lower && "verify" in lower) || "bit.ly" in lower -> Quad(ThreatSeverity.HIGH, "Suspicious URL / Phishing Risk", "The input matches common phishing indicators.", "Do not submit credentials or payment information.")
+            "apk" in lower || "download" in lower || "mod" in lower -> Quad(ThreatSeverity.CRITICAL, "Untrusted Sideload Application", "The input suggests installation from a third-party package source.", "Install apps only from trusted sources and verify signatures.")
+            "password" in lower || "123456" in lower || "admin" in lower -> Quad(ThreatSeverity.MEDIUM, "Weak Credential Pattern", "The input contains a commonly targeted credential pattern.", "Use a unique long password and phishing-resistant MFA.")
+            "camera" in lower || "microphone" in lower || "location" in lower -> Quad(ThreatSeverity.LOW, "Privacy-Sensitive Permission", "The input references sensitive device permissions.", "Review whether the permission is required and minimize access.")
+            else -> Quad(ThreatSeverity.SAFE, "No Local Signature Matched", "No known local heuristic signature matched this input.", "A clean heuristic result is not proof of safety.")
         }
-        ThreatItem("ai_${System.currentTimeMillis()}", quad.first, scanCategory, quad.first, quad.third, quad.fourth)
+        ThreatItem("ai_${System.currentTimeMillis()}", quad.second, scanCategory, quad.first, quad.third, quad.fourth)
     }
 
     suspend fun getSentinelAiChatResponse(userMessage: String, historyContext: String): String = withContext(Dispatchers.IO) {
@@ -148,8 +137,7 @@ class SecurityRepository(private val scanLogDao: ScanLogDao) {
             "phishing" in lower || "link" in lower -> "Do not submit credentials through suspicious links; independently verify the domain."
             "password" in lower -> "Use unique long passwords and phishing-resistant MFA."
             "dark web" in lower || "leak" in lower -> "Treat breach results as verified only when sourced from a trusted breach-data provider."
-            else -> "Keep Android updated, minimize permissions and treat simulated diagnostics as non-verifying.
-"
+            else -> "Keep Android updated, minimize permissions and treat simulated diagnostics as non-verifying."
         }
     }
 
