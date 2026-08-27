@@ -1,24 +1,38 @@
 package com.example.vpn
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.net.InetSocketAddress
-import java.net.Socket
+import android.content.Context
 
 /**
- * Minimal transport boundary used by the VPN controller.
+ * Production transport boundary for the official WireGuard Android userspace backend.
  *
- * This class deliberately performs endpoint reachability only. Reachability is NOT a WireGuard
- * handshake, so callers must not use [isReachable] as proof of an encrypted tunnel. A production
- * implementation must inject a real WireGuard backend and report its handshake timestamp.
+ * This implementation fails closed until a real backend and provisioned peer configuration are
+ * supplied. Endpoint reachability alone is never treated as a successful WireGuard handshake.
  */
-class WireGuardTransport {
-    suspend fun isReachable(host: String, port: Int, timeoutMs: Int = 3000): Boolean = withContext(Dispatchers.IO) {
-        runCatching {
-            Socket().use { socket ->
-                socket.connect(InetSocketAddress(host, port), timeoutMs)
-            }
-            true
-        }.getOrDefault(false)
-    }
+interface WireGuardTransport {
+    suspend fun start(config: WireGuardTunnelConfig): WireGuardTransportResult
+    suspend fun stop(): WireGuardTransportResult
+    suspend fun latestHandshakeEpochSeconds(): Long?
+}
+
+sealed interface WireGuardTransportResult {
+    data object Started : WireGuardTransportResult
+    data object Stopped : WireGuardTransportResult
+    data class Failure(val message: String) : WireGuardTransportResult
+}
+
+class UnprovisionedWireGuardTransport(
+    @Suppress("UNUSED_PARAMETER") private val context: Context
+) : WireGuardTransport {
+    override suspend fun start(config: WireGuardTunnelConfig): WireGuardTransportResult =
+        if (!config.isComplete()) {
+            WireGuardTransportResult.Failure("Incomplete WireGuard peer configuration")
+        } else {
+            WireGuardTransportResult.Failure(
+                "WireGuard backend is not provisioned. Configure the official wg-go backend and a verified peer before enabling CONNECTED state."
+            )
+        }
+
+    override suspend fun stop(): WireGuardTransportResult = WireGuardTransportResult.Stopped
+
+    override suspend fun latestHandshakeEpochSeconds(): Long? = null
 }
