@@ -3,11 +3,13 @@ package com.example.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -44,13 +46,10 @@ fun CapabilityEvidenceCard(
             .padding(14.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            androidx.compose.foundation.layout.Box(
-                Modifier.size(9.dp).clip(CircleShape).background(accent)
-            )
+            Box(Modifier.size(9.dp).clip(CircleShape).background(accent))
             Text(evidence.title, modifier = Modifier.weight(1f), color = skin.textPrimaryColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             Text(evidence.status.name, color = accent, fontSize = 9.sp, fontWeight = FontWeight.Black)
         }
-        Spacer(Modifier.width(1.dp))
         Text("Izvor: ${evidence.source}", color = skin.textMutedColor, fontSize = 9.sp, modifier = Modifier.padding(top = 5.dp))
         Text(evidence.details, color = skin.textSecondaryColor, fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
     }
