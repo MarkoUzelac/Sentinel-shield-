@@ -51,7 +51,7 @@ class WireGuardTunnelController(
             val isFresh = handshake != null &&
                 handshake >= verificationStarted - HANDSHAKE_CLOCK_SKEW_MS &&
                 handshake <= System.currentTimeMillis() + HANDSHAKE_CLOCK_SKEW_MS
-            if (isFresh) {
+            if (transport.isTunnelUp() && isFresh) {
                 _state.value = WireGuardTunnelState.Connected(handshake / 1000L)
                 monitorTunnelHealth()
                 return
@@ -66,19 +66,24 @@ class WireGuardTunnelController(
             delay(HEALTH_POLL_INTERVAL_MS)
             val handshake = transport.latestHandshakeEpochMillis()
             val now = System.currentTimeMillis()
-            val healthy = handshake != null &&
+            val healthy = transport.isTunnelUp() &&
+                handshake != null &&
                 handshake > 0L &&
                 now - handshake <= MAX_HANDSHAKE_AGE_MS
             if (!healthy) {
-                failClosed("WireGuard handshake became stale; tunnel was stopped for safety")
+                failClosed("WireGuard transport or handshake became unhealthy; tunnel was stopped for safety")
                 return
             }
+            _state.value = WireGuardTunnelState.Connected(handshake!! / 1000L)
         }
     }
 
-    private suspend fun failClosed(message: String) {
-        transport.stop()
-        _state.value = WireGuardTunnelState.Error(message)
+    private fun failClosed(message: String) {
+        lifecycleJob?.cancel()
+        lifecycleJob = scope.launch(Dispatchers.IO) {
+            transport.stop()
+            _state.value = WireGuardTunnelState.Error(message)
+        }
     }
 
     fun stop() {
