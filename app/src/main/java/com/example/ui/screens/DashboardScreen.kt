@@ -39,15 +39,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.ThreatSnapshotStore
 import com.example.data.localization.stringRes
 import com.example.data.model.CapabilityEvidenceSnapshot
 import com.example.data.model.CapabilityId
+import com.example.data.model.ThreatRisk
 import com.example.ui.components.CapabilityEvidenceCard
 import com.example.ui.components.QuickActionButton
 import com.example.ui.components.ShieldGaugeCard
@@ -63,12 +66,33 @@ fun DashboardScreen(viewModel: MainViewModel, onNavigateToAiScanner: () -> Unit,
     val logs by viewModel.scanLogs.collectAsState()
     val securityScore by viewModel.securityScore.collectAsState()
     val evidence by viewModel.capabilityEvidence.collectAsState()
+    val threat by ThreatSnapshotStore.snapshot.collectAsState()
     val evidenceSnapshot = remember(evidence) { CapabilityEvidenceSnapshot.from(evidence) }
 
     LazyColumn(modifier = modifier.fillMaxSize().background(skin.bgColor).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(44.dp).then(androidx.compose.ui.draw.clip(CircleShape)).background(skin.primaryColor.copy(alpha = .15f)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Security, null, tint = skin.primaryColor) }; Spacer(Modifier.width(10.dp)); Column(Modifier.weight(1f)) { Text(text = "SENTINEL SHIELD PRO", color = skin.textPrimaryColor, fontSize = 19.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp); Text(text = "JEDINSTVENI MODEL DOKAZA", color = skin.textMutedColor, fontSize = 10.sp, letterSpacing = 1.sp) } } }
+        item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(44.dp).clip(CircleShape).background(skin.primaryColor.copy(alpha = .15f)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Security, null, tint = skin.primaryColor)
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(text = "SENTINEL SHIELD PRO", color = skin.textPrimaryColor, fontSize = 19.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                    Text(text = "JEDINSTVENI MODEL DOKAZA", color = skin.textMutedColor, fontSize = 10.sp, letterSpacing = 1.sp)
+                }
+            }
+        }
         item { ShieldGaugeCard(score = securityScore, isScanning = isScanning, modifier = Modifier.fillMaxWidth()) }
-        item { Card(colors = CardDefaults.cardColors(containerColor = skin.cardColor), border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(skin.borderColor, skin.primaryColor))), shape = RoundedCornerShape(16.dp)) { Column(Modifier.padding(16.dp)) { Text(text = "CAPABILITY / EVIDENCE STATUS", color = skin.textPrimaryColor, fontSize = 12.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.height(8.dp)); Text(text = "VERIFIED = konkretan runtime dokaz · UNVERIFIED = postoji podatak, ali nije dovoljan za sigurnosni zaključak · UNAVAILABLE = izvor trenutno nije dostupan.", color = skin.textMutedColor, fontSize = 9.sp) } } }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = skin.cardColor), border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(skin.borderColor, skin.primaryColor))), shape = RoundedCornerShape(16.dp)) {
+                Column(Modifier.padding(16.dp)) {
+                    Text(text = "CAPABILITY / EVIDENCE STATUS", color = skin.textPrimaryColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Text(text = "VERIFIED = konkretan runtime dokaz · UNVERIFIED = postoji podatak, ali nije dovoljan za sigurnosni zaključak · UNAVAILABLE = izvor trenutno nije dostupan.", color = skin.textMutedColor, fontSize = 9.sp)
+                }
+            }
+        }
+        item { ThreatSnapshotCard(score = threat.score, risk = threat.risk, findingCount = threat.findings.size, skin = skin) }
         items(evidenceSnapshot.items.filter { it.id in setOf(CapabilityId.VPN_TRANSPORT, CapabilityId.VPN_HANDSHAKE, CapabilityId.RADAR_TELEPHONY, CapabilityId.CALL_MMI, CapabilityId.PHISHING_PROTECTION, CapabilityId.AD_TELEMETRY_FILTER, CapabilityId.REALTIME_SHIELD) }, key = { it.id.name }) { evidenceItem -> CapabilityEvidenceCard(evidence = evidenceItem) }
         item { Button(onClick = { viewModel.startDeepSystemScan() }, enabled = !isScanning, modifier = Modifier.fillMaxWidth().testTag("btn_complete_audit"), colors = ButtonDefaults.buttonColors(containerColor = skin.primaryColor, contentColor = Color.Black), shape = RoundedCornerShape(14.dp)) { Icon(Icons.Default.Security, contentDescription = null); Spacer(Modifier.width(8.dp)); Text(text = if (isScanning) "SKENIRANJE U TIJEKU…" else "POKRENI POTPUNI SIGURNOSNI AUDIT", fontWeight = FontWeight.Bold) } }
         if (isScanning) item { Card(colors = CardDefaults.cardColors(containerColor = skin.cardColor), shape = RoundedCornerShape(14.dp)) { Column(Modifier.padding(14.dp)) { Text(text = scanStep, color = skin.textSecondaryColor, fontSize = 11.sp); Spacer(Modifier.height(8.dp)); LinearProgressIndicator(progress = { scanProgress }, modifier = Modifier.fillMaxWidth(), color = skin.primaryColor) } } }
@@ -79,8 +103,37 @@ fun DashboardScreen(viewModel: MainViewModel, onNavigateToAiScanner: () -> Unit,
         item { QuickActionButton("Network Audit", evidenceSnapshot.statusOf(CapabilityId.NETWORK_AUDIT).name, Icons.Default.Security, skin.primaryColor, onNavigateToNetwork, Modifier.fillMaxWidth()) }
         if (logs.isNotEmpty()) {
             item { Text(text = "SIGURNOSNI DNEVNIK", color = skin.textMutedColor, fontSize = 11.sp, letterSpacing = 1.sp) }
-            items(logs.takeLast(5).asReversed(), key = { it.id }) { log -> Card(colors = CardDefaults.cardColors(containerColor = skin.cardColor), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) { Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).then(androidx.compose.ui.draw.clip(CircleShape)).background(if (log.status == "ALERT") Color(0xFFFF1744) else skin.primaryColor)); Spacer(Modifier.width(10.dp)); Column(Modifier.weight(1f)) { Text(text = log.title, color = skin.textPrimaryColor, fontSize = 12.sp, fontWeight = FontWeight.Bold); Text(text = log.summary, color = skin.textSecondaryColor, fontSize = 10.sp) }; IconButton(onClick = { viewModel.deleteLog(log.id) }) { Icon(Icons.Default.Delete, contentDescription = null, tint = skin.textMutedColor) } } } }
+            items(logs.takeLast(5).asReversed(), key = { it.id }) { log ->
+                Card(colors = CardDefaults.cardColors(containerColor = skin.cardColor), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(if (log.status == "ALERT") Color(0xFFFF1744) else skin.primaryColor))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) { Text(text = log.title, color = skin.textPrimaryColor, fontSize = 12.sp, fontWeight = FontWeight.Bold); Text(text = log.summary, color = skin.textSecondaryColor, fontSize = 10.sp) }
+                        IconButton(onClick = { viewModel.deleteLog(log.id) }) { Icon(Icons.Default.Delete, contentDescription = null, tint = skin.textMutedColor) }
+                    }
+                }
+            }
         }
         item { Text(text = "Svi statusi dolaze iz jednog Capability / Evidence modela; UI ne pretpostavlja da je zaštita verificirana.", color = skin.textMutedColor, fontSize = 9.sp) }
+    }
+}
+
+@Composable
+private fun ThreatSnapshotCard(score: Int, risk: ThreatRisk, findingCount: Int, skin: com.example.ui.theme.AppSkin) {
+    val label = when (risk) {
+        ThreatRisk.NORMAL -> "NORMAL"
+        ThreatRisk.WATCH -> "WATCH"
+        ThreatRisk.SUSPICIOUS -> "SUSPICIOUS"
+        ThreatRisk.HIGH -> "HIGH RISK"
+    }
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = skin.cardColor)) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("SIGNAL INTELLIGENCE", color = skin.textPrimaryColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text(label, color = skin.primaryColor, fontSize = 17.sp, fontWeight = FontWeight.Black)
+                Text("$findingCount nalaza · zajednički radar/network/VPN snapshot", color = skin.textMutedColor, fontSize = 9.sp)
+            }
+            Text("$score/100", color = skin.primaryColor, fontSize = 22.sp, fontWeight = FontWeight.Black)
+        }
     }
 }
