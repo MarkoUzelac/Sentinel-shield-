@@ -12,7 +12,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 /** Central bridge between runtime providers and the single threat snapshot consumed by UI. */
 class SignalIntelligenceCoordinator(
-    private val engine: SignalIntelligenceEngine = SignalIntelligenceEngine(),
+    private val engine: SignalIntelligenceEngine,
+    private val now: () -> Long = { System.currentTimeMillis() },
     private val observationRetentionMs: Long = 120_000L
 ) {
     private val observations = ConcurrentHashMap<String, SignalObservation>()
@@ -41,8 +42,8 @@ class SignalIntelligenceCoordinator(
     }
 
     private fun prune() {
-        val now = System.currentTimeMillis()
-        observations.entries.removeIf { now - it.value.observedAtEpochMs > observationRetentionMs }
+        val cutoff = now() - observationRetentionMs
+        observations.entries.removeIf { it.value.observedAtEpochMs < cutoff }
     }
 
     private fun recompute() {
