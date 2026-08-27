@@ -11,6 +11,7 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,16 +23,23 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,15 +61,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.model.CapabilityEvidence
 import com.example.data.model.CapabilityEvidenceSnapshot
 import com.example.data.model.CapabilityId
 import com.example.ui.components.CapabilityModuleHeader
@@ -89,7 +94,7 @@ class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
     private val vpnConsentLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) viewModel.onVpnConsentGranted() else viewModel.onVpnConsentDenied()
+        if (result.resultCode == RESULT_OK) viewModel.onVpnConsentGranted() else viewModel.onVpnConsentDenied()
     }
 
     private val wireGuardProfileLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -97,7 +102,7 @@ class MainActivity : ComponentActivity() {
             runCatching {
                 contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
                     ?: error("Could not read selected WireGuard profile")
-            }.onSuccess { text -> viewModel.importWireGuardProfile(text) }
+            }.onSuccess(viewModel::importWireGuardProfile)
                 .onFailure { viewModel.reportVpnError(it.message ?: "Could not import WireGuard profile") }
         }
     }
@@ -110,7 +115,9 @@ class MainActivity : ComponentActivity() {
             SentinelShieldTheme {
                 SentinelShieldApp(
                     viewModel = viewModel,
-                    onImportWireGuardProfile = { wireGuardProfileLauncher.launch(arrayOf("application/octet-stream", "text/plain", "*/*")) }
+                    onImportWireGuardProfile = {
+                        wireGuardProfileLauncher.launch(arrayOf("application/octet-stream", "text/plain", "*/*"))
+                    }
                 )
             }
         }
@@ -119,15 +126,14 @@ class MainActivity : ComponentActivity() {
 
 enum class SentinelTab(val title: String, val icon: ImageVector, val tag: String) {
     SHIELD("Shield", Icons.Default.Security, "tab_nav_shield"),
-    RADAR("Radar", Icons.Default.Security, "tab_nav_radar"),
-    VPN("VPN", Icons.Default.Security, "tab_nav_vpn"),
-    CALLS("Call Sec", Icons.Default.Security, "tab_nav_call_sec"),
-    LEGAL("Legal", Icons.Default.Security, "tab_nav_legal"),
+    RADAR("Radar", Icons.Default.Radar, "tab_nav_radar"),
+    VPN("VPN", Icons.Default.VpnKey, "tab_nav_vpn"),
+    CALLS("Call Sec", Icons.Default.Call, "tab_nav_call_sec"),
+    LEGAL("Legal", Icons.Default.Gavel, "tab_nav_legal"),
     VAULT("Vault", Icons.Default.Star, "tab_nav_vault")
 }
 
 private enum class SecondaryScreen { AI, NETWORK, DARK_WEB, SUBSCRIPTION, SETTINGS, HELP }
-
 private enum class DrawerDestination { SUBSCRIPTION, SETTINGS, HELP }
 
 @Composable
@@ -176,7 +182,13 @@ fun SentinelShieldApp(viewModel: MainViewModel, onImportWireGuardProfile: () -> 
                             selected = secondary == null && selectedTab == index,
                             onClick = { secondary = null; selectedTab = index },
                             icon = { Icon(tab.icon, contentDescription = tab.title) },
-                            label = { Text(tab.title, fontSize = 10.sp, fontWeight = if (secondary == null && selectedTab == index) FontWeight.Bold else FontWeight.Normal) },
+                            label = {
+                                Text(
+                                    tab.title,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (secondary == null && selectedTab == index) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = CyberGreen,
                                 selectedTextColor = CyberGreen,
@@ -192,34 +204,22 @@ fun SentinelShieldApp(viewModel: MainViewModel, onImportWireGuardProfile: () -> 
         ) { innerPadding ->
             Column(Modifier.fillMaxSize().background(DarkBackground).padding(innerPadding)) {
                 Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .background(DarkBackground)
-                        .padding(horizontal = 6.dp),
+                    Modifier.fillMaxWidth().height(52.dp).background(DarkBackground).padding(horizontal = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (secondary != null) {
-                        IconButton(
-                            onClick = { secondary = null },
-                            modifier = Modifier.testTag("header_back")
-                        ) {
+                        IconButton(onClick = { secondary = null }, modifier = Modifier.testTag("header_back")) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "Natrag", tint = CyberGreen)
                         }
                     } else {
-                        IconButton(
-                            onClick = { drawerScope.launch { drawerState.open() } },
-                            modifier = Modifier.testTag("open_side_menu")
-                        ) {
+                        IconButton(onClick = { drawerScope.launch { drawerState.open() } }, modifier = Modifier.testTag("open_side_menu")) {
                             Icon(Icons.Default.Menu, contentDescription = "Otvori bočni izbornik", tint = CyberGreen)
                         }
                     }
                     Spacer(Modifier.width(4.dp))
                     Column(Modifier.weight(1f)) {
                         Text("SENTINEL SHIELD", color = CyberGreen, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, fontSize = 15.sp)
-                        if (secondary == null) {
-                            Text("Zaštita u stvarnom vremenu", color = TextMuted, fontSize = 10.sp, letterSpacing = .8.sp)
-                        }
+                        if (secondary == null) Text("Zaštita u stvarnom vremenu", color = TextMuted, fontSize = 10.sp, letterSpacing = .8.sp)
                     }
                 }
 
@@ -256,23 +256,13 @@ fun SentinelShieldApp(viewModel: MainViewModel, onImportWireGuardProfile: () -> 
 }
 
 @Composable
-private fun SentinelSideMenu(
-    secondary: SecondaryScreen?,
-    onDestination: (DrawerDestination) -> Unit
-) {
+private fun SentinelSideMenu(secondary: SecondaryScreen?, onDestination: (DrawerDestination) -> Unit) {
     Column(
-        Modifier
-            .fillMaxSize()
-            .background(DarkBackground)
-            .padding(horizontal = 14.dp, vertical = 22.dp)
+        Modifier.fillMaxSize().background(DarkBackground).padding(horizontal = 14.dp, vertical = 22.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp)) {
             Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(CyberGreen.copy(alpha = .12f))
-                    .border(1.dp, CyberGreen.copy(alpha = .55f), RoundedCornerShape(14.dp)),
+                modifier = Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(CyberGreen.copy(alpha = .12f)).border(1.dp, CyberGreen.copy(alpha = .55f), RoundedCornerShape(14.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(Icons.Default.Security, contentDescription = null, tint = CyberGreen, modifier = Modifier.size(22.dp))
@@ -283,54 +273,22 @@ private fun SentinelSideMenu(
                 Text("Verzija 2.8 PRO", color = TextMuted, fontSize = 10.sp, letterSpacing = 1.sp)
             }
         }
-
         Spacer(Modifier.height(26.dp))
         Text("IZBORNIK", color = TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp, modifier = Modifier.padding(horizontal = 8.dp))
         Spacer(Modifier.height(8.dp))
 
-        SideMenuItem(
-            title = "Pretplata & Licence",
-            subtitle = "Vault & Pro aktivacija",
-            icon = Icons.Default.Star,
-            selected = secondary == SecondaryScreen.SUBSCRIPTION,
-            testTag = "drawer_subscription",
-            onClick = { onDestination(DrawerDestination.SUBSCRIPTION) }
-        )
-        SideMenuItem(
-            title = "Postavke",
-            subtitle = "Jezik, izgled i aplikacija",
-            icon = Icons.Default.Settings,
-            selected = secondary == SecondaryScreen.SETTINGS,
-            testTag = "drawer_settings",
-            onClick = { onDestination(DrawerDestination.SETTINGS) }
-        )
-        SideMenuItem(
-            title = "Pomoć & Podrška",
-            subtitle = "Vodiči i sigurnosne informacije",
-            icon = Icons.Default.HelpOutline,
-            selected = secondary == SecondaryScreen.HELP,
-            testTag = "drawer_help",
-            onClick = { onDestination(DrawerDestination.HELP) }
-        )
+        SideMenuItem("Pretplata & Licence", "Vault & Pro aktivacija", Icons.Default.Star, secondary == SecondaryScreen.SUBSCRIPTION, "drawer_subscription") { onDestination(DrawerDestination.SUBSCRIPTION) }
+        SideMenuItem("Postavke", "Jezik, izgled i aplikacija", Icons.Default.Settings, secondary == SecondaryScreen.SETTINGS, "drawer_settings") { onDestination(DrawerDestination.SETTINGS) }
+        SideMenuItem("Pomoć & Podrška", "Vodiči i sigurnosne informacije", Icons.Default.HelpOutline, secondary == SecondaryScreen.HELP, "drawer_help") { onDestination(DrawerDestination.HELP) }
 
         Spacer(Modifier.weight(1f))
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp))
-                .background(DarkCard)
-                .border(1.dp, DarkCardBorder, RoundedCornerShape(18.dp))
-                .padding(16.dp)
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(DarkCard).border(1.dp, DarkCardBorder, RoundedCornerShape(18.dp)).padding(16.dp)
         ) {
             Column {
                 Text("LOCAL-FIRST SECURITY", color = CyberGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                 Spacer(Modifier.height(6.dp))
-                Text(
-                    "Dokazi ostaju lokalni kada izvor to dopušta. Stanje se prikazuje kroz VERIFIED / UNVERIFIED / UNAVAILABLE.",
-                    color = TextSecondary,
-                    fontSize = 11.sp,
-                    lineHeight = 15.sp
-                )
+                Text("Dokazi ostaju lokalni kada izvor to dopušta. Stanje se prikazuje kroz VERIFIED / UNVERIFIED / UNAVAILABLE.", color = TextSecondary, fontSize = 11.sp, lineHeight = 15.sp)
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -339,33 +297,12 @@ private fun SentinelSideMenu(
 }
 
 @Composable
-private fun SideMenuItem(
-    title: String,
-    subtitle: String,
-    icon: ImageVector,
-    selected: Boolean,
-    testTag: String,
-    onClick: () -> Unit
-) {
+private fun SideMenuItem(title: String, subtitle: String, icon: ImageVector, selected: Boolean, testTag: String, onClick: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(if (selected) CyberGreen.copy(alpha = .12f) else Color.Transparent)
-            .border(1.dp, if (selected) CyberGreen.copy(alpha = .55f) else DarkCardBorder, RoundedCornerShape(18.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 13.dp)
-            .testTag(testTag),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(18.dp)).background(if (selected) CyberGreen.copy(alpha = .12f) else Color.Transparent).border(1.dp, if (selected) CyberGreen.copy(alpha = .55f) else DarkCardBorder, RoundedCornerShape(18.dp)).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 13.dp).testTag(testTag),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(if (selected) CyberGreen.copy(alpha = .16f) else DarkCard),
-            contentAlignment = Alignment.Center
-        ) {
+        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(if (selected) CyberGreen.copy(alpha = .16f) else DarkCard), contentAlignment = Alignment.Center) {
             Icon(icon, contentDescription = null, tint = if (selected) CyberGreen else TextSecondary, modifier = Modifier.size(20.dp))
         }
         Spacer(Modifier.width(12.dp))
@@ -374,29 +311,17 @@ private fun SideMenuItem(
             Spacer(Modifier.height(2.dp))
             Text(subtitle, color = TextMuted, fontSize = 10.sp)
         }
-        Box(
-            modifier = Modifier
-                .size(10.dp)
-                .clip(CircleShape)
-                .background(if (selected) CyberGreen else Color.Transparent)
-                .border(1.dp, if (selected) CyberGreen else TextMuted.copy(alpha = .45f), CircleShape)
-        )
+        Box(Modifier.size(10.dp).clip(CircleShape).background(if (selected) CyberGreen else Color.Transparent).border(1.dp, if (selected) CyberGreen else TextMuted.copy(alpha = .45f), CircleShape))
     }
 }
 
 @Composable
 private fun HelpSupportScreen() {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(DarkBackground)
-            .padding(16.dp)
-    ) {
+    Column(Modifier.fillMaxSize().background(DarkBackground).padding(16.dp)) {
         Text("POMOĆ & PODRŠKA", color = CyberGreen, fontSize = 18.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
         Spacer(Modifier.height(6.dp))
         Text("Sentinel Shield kontrola i tumačenje sigurnosnih stanja.", color = TextSecondary, fontSize = 12.sp)
         Spacer(Modifier.height(18.dp))
-
         HelpCard("VERIFIED", "Dokaz je dobiven iz definiranog izvora i još je unutar razdoblja svježine.")
         HelpCard("UNVERIFIED", "Podatak postoji ili je mjeren, ali nije dovoljan za snažnu sigurnosnu tvrdnju ili je istekao.")
         HelpCard("UNAVAILABLE", "Izvor podataka nije dostupan ili nema potrebne dozvole/konfiguraciju.")
@@ -406,15 +331,7 @@ private fun HelpSupportScreen() {
 
 @Composable
 private fun HelpCard(title: String, body: String) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .padding(bottom = 10.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(DarkCard)
-            .border(1.dp, DarkCardBorder, RoundedCornerShape(18.dp))
-            .padding(16.dp)
-    ) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 10.dp).clip(RoundedCornerShape(18.dp)).background(DarkCard).border(1.dp, DarkCardBorder, RoundedCornerShape(18.dp)).padding(16.dp)) {
         Text(title, color = CyberGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
         Spacer(Modifier.height(5.dp))
         Text(body, color = TextSecondary, fontSize = 12.sp, lineHeight = 17.sp)
@@ -422,15 +339,13 @@ private fun HelpCard(title: String, body: String) {
 }
 
 @Composable
-private fun EvidenceWrappedScreen(
-    evidence: CapabilityEvidenceSnapshot,
-    capabilityId: CapabilityId,
-    content: @Composable () -> Unit
-) {
+private fun EvidenceWrappedScreen(evidence: CapabilityEvidenceSnapshot, capabilityId: CapabilityId, content: @Composable () -> Unit) {
     Column(Modifier.fillMaxSize().padding(horizontal = 10.dp)) {
-        CapabilityModuleHeader(evidence.get(capabilityId))
-        Box(Modifier.weight(1f)) {
-            content()
+        val item = evidence.get(capabilityId)
+        if (item != null) {
+            CapabilityModuleHeader(item)
+            Spacer(Modifier.height(8.dp))
         }
+        content()
     }
 }
