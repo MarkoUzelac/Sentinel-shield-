@@ -41,25 +41,50 @@ The primary UX avoids fake “secured” states, fake server telemetry and fake 
 
 ## 📡 REAL PASSIVE RADAR
 
-The Radar module now consumes hardware/OS-backed observations instead of mock signals.
+The Radar module consumes hardware/OS-backed observations instead of mock signals.
 
 ### Cellular telemetry
 
-`SignalRadarProvider` reads the Android `TelephonyManager.allCellInfo` stream and normalizes supported records into a common model:
+`SignalRadarProvider` reads Android `TelephonyManager.allCellInfo` and normalizes supported records into a common model:
 
 - 2G GSM
 - 3G WCDMA
 - 4G LTE
-- 5G NR (on supported Android/API levels)
+- 5G NR on supported Android/API levels
 - serving vs. neighboring cells
 - signal level / RSSI when exposed
+- MCC / MNC
 - cell ID and area code when exposed
 
-The app does **not** claim that a cell observation is proof of an IMSI catcher. A suspicious cellular pattern is treated as heuristic/anomalous evidence and remains `UNVERIFIED`.
+Android documents `getAllCellInfo()` as returning available registered and neighboring cell information. citeturn0search4
+
+### 🗼 OpenCellID tower geolocation
+
+The radar now has a real `OpenCellIdProvider` adapter. When `OPEN_CELL_ID_API_KEY` is configured, Sentinel sends the observed **MCC + MNC + area code + cell ID + radio technology** to OpenCellID and can render the provider-backed tower coordinate and reported range on the tactical map.
+
+OpenCellID documents `/cell/get` for resolving a cell position and supports GSM, UMTS, LTE and NR radio types. Availability and usage limits depend on the API-key/account policy. citeturn1search0
+
+The provider result is stored with explicit provenance:
+
+```text
+TelephonyManager
+      ↓
+real cell identity
+      ↓
+OpenCellID
+      ↓
+real tower coordinate
+      ↓
+locationSource = OpenCellID
+```
+
+If the key is missing, the provider fails closed to the device's real location rather than manufacturing a tower coordinate.
 
 ### Bluetooth LE telemetry
 
-The radar uses the Android BLE scanner to observe nearby advertisements when the user grants the required permissions. Each observation includes:
+The radar uses Android's BLE scanner to observe nearby advertisements when the user grants the required permissions. Android requires `BLUETOOTH_SCAN` on modern Android versions and location permission may also be required depending on the scan configuration. citeturn0search0turn0search2
+
+Each observation includes:
 
 - RSSI
 - runtime timestamp
@@ -86,23 +111,25 @@ No coordinates are invented when the OS does not provide a valid fix.
 
 ### Tactical visualization
 
-`TacticalRadarMap` renders the runtime signal picture around the **actual device position**. Important distinction:
+`TacticalRadarMap` renders the runtime signal picture around the **actual device position**.
 
 - device GPS position = real coordinate
 - BLE distance = estimate, without invented direction
-- cellular observation = real radio observation; tower coordinates are shown only when an external tower-geolocation provider supplies real coordinates
+- cellular observation = real radio observation
+- tower coordinate = shown only when backed by a real geolocation provider
 - no fake tower pins are generated from arbitrary offsets
 
 ---
 
 ## 🧭 WHAT THE PHONE CAN AND CANNOT DETECT
 
-Android applications are constrained by the radio hardware, OS permissions and privacy model. Sentinel therefore uses a strict capability boundary.
+Android applications are constrained by radio hardware, OS permissions and the privacy model. Sentinel therefore uses a strict capability boundary.
 
 ### Supported
 
 - passive BLE advertisement discovery
 - Android-exposed cellular neighbor/serving-cell telemetry
+- real tower coordinates from a configured cell-geolocation provider
 - the device's own GPS/GNSS position
 - current network transports and validated state
 - VPN transport state and WireGuard peer handshake evidence
@@ -113,13 +140,15 @@ Sentinel cannot, using ordinary Android application APIs alone:
 
 - extract IMSIs of surrounding subscribers
 - identify a person from a nearby phone's radio signal
-- reliably determine the GPS coordinate of a third-party phone from RSSI alone
+- obtain another person's GPS location merely because their phone is nearby
+- reliably determine a third-party phone's GPS coordinate from RSSI alone
 - physically disable an external cell tower
 - jam cellular/Bluetooth frequencies
 - guarantee that a cell site is malicious from `CellInfo` alone
+- silently access another person's device-location service
 - scan arbitrary Internet devices without an explicit, authorized network-access workflow
 
-This is intentional. The UI communicates uncertainty instead of turning weak signals into false certainty.
+For other devices, the supported nearby-discovery path is **OS-mediated BLE/cellular observation**. A third-party device's precise location requires that device's own consented location-sharing mechanism or another authorized service; it cannot be inferred from the phone's location service alone.
 
 ---
 
@@ -133,7 +162,7 @@ UNVERIFIED
 UNAVAILABLE
 ```
 
-Evidence carries provenance and expiry. A stale non-available result automatically degrades to `UNVERIFIED` rather than remaining visually trustworthy forever.
+Evidence carries provenance and expiry. A stale result automatically degrades instead of remaining visually trustworthy forever.
 
 ### Examples
 
@@ -146,7 +175,11 @@ Cellular telemetry / BLE observation
                 ↓
             UNVERIFIED
 
-No telephony capability / missing required permission
+OpenCellID tower coordinate
+                ↓
+       provider-backed evidence
+
+No telephony capability / missing permission
                 ↓
            UNAVAILABLE
 ```
@@ -173,7 +206,7 @@ VERIFIED
 
 If transport or handshake health disappears, the controller fails closed and stops the transport.
 
-The primary UI no longer requires the user to understand `.conf` files. A real managed endpoint/profile must still exist somewhere outside the UI flow; Sentinel will not invent a server or credential.
+The primary UI no longer requires the user to understand `.conf` files. A real managed endpoint/profile must still exist outside the UI flow; Sentinel will not invent a server or credential.
 
 ---
 
@@ -196,24 +229,43 @@ The app intentionally avoids aggressive network-wide probing as a default securi
 
 ---
 
-## 📍 TACTICAL MAP RULES
-
-The map follows a strict provenance policy:
+## 🗺️ MAP PROVENANCE
 
 ```text
-REAL LOCATION → allowed to render as coordinate
-REAL RADIO OBSERVATION → allowed to render as signal evidence
-ESTIMATE → explicitly labeled estimate
-UNKNOWN → never promoted into a fake coordinate
+DEVICE GPS
+   └── REAL COORDINATE
+
+CELL ID + OpenCellID
+   └── PROVIDER-BACKED TOWER COORDINATE
+
+BLE RSSI
+   └── DISTANCE ESTIMATE / SIGNAL ZONE
+
+UNKNOWN
+   └── NO PIN
 ```
 
-Google Maps can be opened for the device's own current coordinates using a standard geo intent. A future tower-geolocation adapter may enrich cell observations only when it returns real provider-backed coordinates.
+Google Maps can be opened for the device's own current coordinates using a standard geo intent. Tower pins are rendered only when a real provider supplies coordinates.
+
+---
+
+## 🔑 SECRET CONFIGURATION
+
+Never commit API keys to GitHub.
+
+Configure the OpenCellID key through the AI Studio/CI secret store as:
+
+```text
+OPEN_CELL_ID_API_KEY=...
+```
+
+The repository only contains the placeholder in `.env.example`.
+
+**If an API key has ever been pasted into chat, a commit, screenshot or public log, rotate/revoke that key and issue a new one.**
 
 ---
 
 ## 🧪 TESTING
-
-The project includes deterministic evidence freshness testing and WireGuard state-machine invariant coverage.
 
 Recommended verification order:
 
@@ -257,7 +309,7 @@ A switch or UI animation never equals proof of security.
 
 ### 2. No fake coordinates
 
-If Android does not provide a coordinate, Sentinel does not manufacture one.
+If Android or a configured geolocation provider does not provide a coordinate, Sentinel does not manufacture one.
 
 ### 3. No invasive radio claims
 
@@ -280,6 +332,7 @@ app/src/main/java/com/example/
 ├── data/
 │   ├── AndroidNetworkEvidenceProvider.kt
 │   ├── DeviceLocationProvider.kt
+│   ├── OpenCellIdProvider.kt
 │   ├── SignalRadarProvider.kt
 │   └── model/
 │       ├── CapabilityEvidence.kt
@@ -300,7 +353,7 @@ app/src/main/java/com/example/
 
 ## ⚠️ SECURITY / PRIVACY NOTE
 
-Sentinel Shield is designed as a defensive local security console. It deliberately does not provide frequency jamming, subscriber-identity extraction, or covert tracking of third-party devices. All “threat” conclusions are tied to the strength and provenance of the evidence actually available to the Android runtime.
+Sentinel Shield is designed as a defensive local security console. It deliberately does not provide frequency jamming, subscriber-identity extraction, or covert tracking of third-party devices. All threat conclusions are tied to the strength and provenance of the evidence actually available to the Android runtime.
 
 ---
 
@@ -315,6 +368,8 @@ Sentinel Shield is designed as a defensive local security console. It deliberate
  ├── ✅ Hardware-backed device geolocation
  ├── ✅ Passive BLE radar
  ├── ✅ Cellular telemetry radar
+ ├── ✅ OpenCellID tower adapter
+ ├── ✅ Provider provenance for tower coordinates
  ├── ✅ Tactical signal visualization
  ├── ✅ WireGuard lifecycle + handshake verification
  │
