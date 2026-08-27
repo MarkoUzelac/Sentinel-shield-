@@ -28,7 +28,7 @@ android {
       if (!keystorePath.isNullOrBlank()) {
         storeFile = file(keystorePath)
         storePassword = System.getenv("STORE_PASSWORD")
-        keyAlias = "upload"
+        keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
         keyPassword = System.getenv("KEY_PASSWORD")
       }
     }
@@ -43,10 +43,15 @@ android {
         getDefaultProguardFile("proguard-android-optimize.txt"),
         "proguard-rules.pro"
       )
-      signingConfig = if (System.getenv("KEYSTORE_PATH").isNullOrBlank()) {
-        signingConfigs.getByName("debug")
-      } else {
+      val productionSigningRequired = System.getenv("RELEASE_SIGNING_REQUIRED") == "true"
+      val hasReleaseSigning = !System.getenv("KEYSTORE_PATH").isNullOrBlank()
+      if (productionSigningRequired && !hasReleaseSigning) {
+        throw GradleException("RELEASE_SIGNING_REQUIRED=true but KEYSTORE_PATH is not configured")
+      }
+      signingConfig = if (hasReleaseSigning) {
         signingConfigs.getByName("release")
+      } else {
+        signingConfigs.getByName("debug")
       }
     }
     debug { }
