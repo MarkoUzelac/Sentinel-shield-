@@ -13,19 +13,17 @@ class WireGuardProfileStore(context: Context) {
         require(profileFile.isFile && profileFile.length() > 0) {
             "WireGuard profile is not provisioned"
         }
-        return profileFile.inputStream().bufferedReader().use(Config::parse)
+        return profileFile.inputStream().bufferedReader().use { Config.parse(it) }
     }
 
     @Synchronized
     fun importProfile(profileText: String): Result<Unit> = runCatching {
         require(profileText.isNotBlank()) { "WireGuard profile is empty" }
-        val parsed = profileText.reader().use(Config::parse)
-        require(parsed.getPeers().isNotEmpty()) { "WireGuard profile must contain at least one peer" }
+        profileText.reader().bufferedReader().use { Config.parse(it) }
 
         val tempFile = File(profileFile.parentFile, "$PROFILE_FILE_NAME.tmp")
         tempFile.writeText(profileText, Charsets.UTF_8)
         check(tempFile.renameTo(profileFile)) { "Could not atomically store WireGuard profile" }
-        parsed
         Unit
     }
 
