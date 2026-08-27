@@ -15,14 +15,14 @@ class WireGuardProfileStore(context: Context) {
         require(profileFile.isFile && profileFile.length() > 0) {
             "WireGuard profile is not provisioned"
         }
-        val reader = BufferedReader(profileFile.reader(Charsets.UTF_8))
+        val reader: BufferedReader = profileFile.bufferedReader(Charsets.UTF_8)
         return reader.use { Config.parse(it) }
     }
 
     @Synchronized
     fun importProfile(profileText: String): Result<Unit> = runCatching {
         require(profileText.isNotBlank()) { "WireGuard profile is empty" }
-        val reader = BufferedReader(StringReader(profileText))
+        val reader = StringReader(profileText).buffered()
         reader.use { Config.parse(it) }
 
         val tempFile = File(profileFile.parentFile, "$PROFILE_FILE_NAME.tmp")
