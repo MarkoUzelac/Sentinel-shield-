@@ -33,7 +33,7 @@ class SecurityRepository(private val scanLogDao: ScanLogDao) {
     suspend fun clearLogs() = scanLogDao.clearAllLogs()
     suspend fun deleteLog(id: Long) = scanLogDao.deleteLogById(id)
 
-    /** Metadata catalog only. No entry below is asserted to be a live production VPN endpoint. */
+    /** Metadata catalog only. A real endpoint must be provisioned before a tunnel can connect. */
     fun getVpnServers(): List<VpnServer> = listOf(
         VpnServer("ch_01", "Switzerland", "Zurich", "🇨🇭", 0, 0, "", "WireGuard", 51820, false),
         VpnServer("is_01", "Iceland", "Reykjavik", "🇮🇸", 0, 0, "", "WireGuard", 51820, false),
