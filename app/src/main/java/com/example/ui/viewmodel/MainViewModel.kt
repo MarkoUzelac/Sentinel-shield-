@@ -26,7 +26,6 @@ import com.example.data.model.NetworkObservation
 import com.example.data.model.NetworkSpeedResult
 import com.example.data.model.RadarObservation
 import com.example.data.model.ThreatItem
-import com.example.data.model.ThreatSeverity
 import com.example.data.model.VpnServer
 import com.example.vpn.WireGuardProfileStore
 import com.example.vpn.WireGuardTunnelController
@@ -56,13 +55,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val vpnConsentRequest: SharedFlow<Intent> = _vpnConsentRequest
     private val _isVpnProvisioned = MutableStateFlow(wireGuardProfileStore.hasProfile())
     val isVpnProvisioned: StateFlow<Boolean> = _isVpnProvisioned.asStateFlow()
-    val isVpnConnected: StateFlow<Boolean> = vpnController.state
-        .stateIn(viewModelScope, SharingStarted.Eagerly, WireGuardTunnelState.Disconnected)
-        .let { state ->
-            MutableStateFlow(state.value is WireGuardTunnelState.Connected).also { connected ->
-                viewModelScope.launch { state.collect { connected.value = it is WireGuardTunnelState.Connected } }
-            }
-        }.asStateFlow()
+    val isVpnConnected: StateFlow<Boolean> = vpnController.state.stateIn(viewModelScope, SharingStarted.Eagerly, WireGuardTunnelState.Disconnected)
+        .let { state -> MutableStateFlow(state.value is WireGuardTunnelState.Connected).also { connected -> viewModelScope.launch { state.collect { connected.value = it is WireGuardTunnelState.Connected } } } }
+        .asStateFlow()
     val scanLogs: StateFlow<List<ScanLogEntity>>
 
     private val _isRealtimeShieldActive = MutableStateFlow(true)
@@ -108,7 +103,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _hasSearchedBreaches = MutableStateFlow(false)
     val hasSearchedBreaches: StateFlow<Boolean> = _hasSearchedBreaches.asStateFlow()
     val jurisdictions: List<JurisdictionInfo>
-
     private val _radarObservation = MutableStateFlow(readRadarObservation())
     val radarObservation: StateFlow<RadarObservation> = _radarObservation.asStateFlow()
     private val _callSecurityObservation = MutableStateFlow(readCallSecurityObservation())
@@ -126,15 +120,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _vpnServers.value = servers
         _selectedVpnServer.value = servers.firstOrNull()
         jurisdictions = repository.getJurisdictions()
-
         networkEvidenceProvider?.let { provider ->
             provider.start()
-            viewModelScope.launch {
-                provider.observation.collect { observation ->
-                    _networkObservation.value = observation
-                    rebuildCapabilityEvidence()
-                }
-            }
+            viewModelScope.launch { provider.observation.collect { observation -> _networkObservation.value = observation; rebuildCapabilityEvidence() } }
         }
         viewModelScope.launch { vpnController.state.collect { rebuildCapabilityEvidence() } }
         rebuildCapabilityEvidence()
@@ -146,21 +134,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val cellCount = if (permissionGranted && telephonyAvailable) runCatching { telephonyManager?.allCellInfo?.size ?: 0 }.getOrDefault(0) else 0
         return RadarObservation(permissionGranted, cellCount, telephonyAvailable)
     }
-
-    private fun readCallSecurityObservation(): CallSecurityObservation = CallSecurityObservation(
-        telephonyAvailable = telephonyManager != null && getApplication<Application>().packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)
-    )
-
-    fun refreshEvidenceSources() {
-        _radarObservation.value = readRadarObservation()
-        _callSecurityObservation.value = readCallSecurityObservation()
-        rebuildCapabilityEvidence()
-    }
-
-    fun markMmiResultVerified(verified: Boolean) {
-        _callSecurityObservation.value = _callSecurityObservation.value.copy(mmiResultVerified = verified)
-        rebuildCapabilityEvidence()
-    }
+    private fun readCallSecurityObservation(): CallSecurityObservation = CallSecurityObservation(telephonyAvailable = telephonyManager != null && getApplication<Application>().packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY))
+    fun refreshEvidenceSources() { _radarObservation.value = readRadarObservation(); _callSecurityObservation.value = readCallSecurityObservation(); rebuildCapabilityEvidence() }
+    fun markMmiResultVerified(verified: Boolean) { _callSecurityObservation.value = _callSecurityObservation.value.copy(mmiResultVerified = verified); rebuildCapabilityEvidence() }
 
     private fun rebuildCapabilityEvidence() {
         val connected = vpnController.state.value is WireGuardTunnelState.Connected
@@ -180,51 +156,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _capabilityEvidence.value = evidence
         updateSecurityScoreFromEvidence(evidence)
     }
-
     private fun updateSecurityScoreFromEvidence(evidence: List<CapabilityEvidence>) {
         if (evidence.isEmpty()) return
         val weights = mapOf(CapabilityStatus.VERIFIED to 1.0, CapabilityStatus.UNVERIFIED to 0.55, CapabilityStatus.UNAVAILABLE to 0.0)
         val now = evidenceClock.nowEpochMillis()
         _securityScore.value = (evidence.map { weights.getValue(it.effectiveStatus(now)) }.average() * 100.0).toInt().coerceIn(0, 100)
     }
-
     fun toggleRealtimeShield(active: Boolean) { _isRealtimeShieldActive.value = active; rebuildCapabilityEvidence() }
     fun toggleAdBlock(active: Boolean) { _isAdBlockActive.value = active; rebuildCapabilityEvidence() }
     fun togglePhishingProtection(active: Boolean) { _isPhishingProtectionActive.value = active; rebuildCapabilityEvidence() }
-
-    fun prepareVpnConsent(): Intent? {
-        val intent = vpnController.prepare()
-        if (intent != null) { vpnController.markAwaitingConsent(); _vpnConsentRequest.tryEmit(intent) }
-        return intent
-    }
-
-    fun onVpnConsentGranted() {
-        val config = runCatching { wireGuardProfileStore.load() }.getOrElse { vpnController.markError("WireGuard profile is not provisioned"); return }
-        vpnController.beginVerification(config)
-    }
-
+    fun prepareVpnConsent(): Intent? { val intent = vpnController.prepare(); if (intent != null) { vpnController.markAwaitingConsent(); _vpnConsentRequest.tryEmit(intent) }; return intent }
+    fun onVpnConsentGranted() { val config = runCatching { wireGuardProfileStore.load() }.getOrElse { vpnController.markError("WireGuard profile is not provisioned"); return }; vpnController.beginVerification(config) }
     fun onVpnConsentDenied() = vpnController.markError("Android VPN permission was not granted")
-
-    fun importWireGuardProfile(profileText: String): Result<Unit> {
-        val result = wireGuardProfileStore.importProfile(profileText)
-        if (result.isSuccess) { _isVpnProvisioned.value = true; vpnController.markError("WireGuard profile imported; ready to connect") }
-        else vpnController.markError(result.exceptionOrNull()?.message ?: "Invalid WireGuard profile")
-        rebuildCapabilityEvidence()
-        return result
-    }
-
+    fun importWireGuardProfile(profileText: String): Result<Unit> { val result = wireGuardProfileStore.importProfile(profileText); if (result.isSuccess) { _isVpnProvisioned.value = true; vpnController.markError("WireGuard profile imported; ready to connect") } else vpnController.markError(result.exceptionOrNull()?.message ?: "Invalid WireGuard profile"); rebuildCapabilityEvidence(); return result }
     fun reportVpnError(message: String) = vpnController.markError(message)
-
-    fun removeWireGuardProfile() {
-        vpnController.stop(); wireGuardProfileStore.clear(); _isVpnProvisioned.value = false; rebuildCapabilityEvidence()
-    }
-
-    fun selectVpnServer(server: VpnServer) {
-        _selectedVpnServer.value = server
-        if (vpnController.state.value is WireGuardTunnelState.Connected) vpnController.stop()
-        rebuildCapabilityEvidence()
-    }
-
+    fun removeWireGuardProfile() { vpnController.stop(); wireGuardProfileStore.clear(); _isVpnProvisioned.value = false; rebuildCapabilityEvidence() }
+    fun selectVpnServer(server: VpnServer) { _selectedVpnServer.value = server; if (vpnController.state.value is WireGuardTunnelState.Connected) vpnController.stop(); rebuildCapabilityEvidence() }
     fun toggleVpnConnection() {
         viewModelScope.launch {
             when (vpnController.state.value) {
@@ -239,9 +186,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             rebuildCapabilityEvidence()
         }
     }
-
     fun onVpnStateChanged(state: WireGuardTunnelState) { if (state is WireGuardTunnelState.Connected) rebuildCapabilityEvidence() }
-
     fun startDeepSystemScan() {
         if (_isDeepScanning.value) return
         viewModelScope.launch {
@@ -253,61 +198,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             rebuildCapabilityEvidence()
         }
     }
-
     fun runSpeedAndSecurityAudit() {
         if (_isTestingSpeed.value) return
-        viewModelScope.launch {
-            _isTestingSpeed.value = true
-            try {
-                _speedTestResult.value = repository.runNetworkSecurityAudit()
-                repository.saveScanLog(ScanLogEntity(title = "Wi-Fi Security & Speed Audit", scanType = "NETWORK_AUDIT", status = "WARNING", score = 0, summary = "Runtime network state and HTTPS probe are available; full security proof is not claimed.", detailsJson = "UNVERIFIED"))
-            } finally { _isTestingSpeed.value = false; rebuildCapabilityEvidence() }
-        }
+        viewModelScope.launch { _isTestingSpeed.value = true; try { _speedTestResult.value = repository.runNetworkSecurityAudit(); repository.saveScanLog(ScanLogEntity(title = "Wi-Fi Security & Speed Audit", scanType = "NETWORK_AUDIT", status = "WARNING", score = 0, summary = "Runtime network state and HTTPS probe are available; full security proof is not claimed.", detailsJson = "UNVERIFIED")) } finally { _isTestingSpeed.value = false; rebuildCapabilityEvidence() } }
     }
-
     fun updateAiTargetInput(input: String) { _aiTargetInput.value = input }
-    fun updateAiCategory(category: String) { _aiScanCategory.value = category }
-    fun runAiThreatAnalysis() {
-        val input = _aiTargetInput.value.trim()
-        if (input.isBlank()) return
-        viewModelScope.launch {
-            _isAiScanning.value = true
-            try {
-                val threat = repository.analyzeSecurityThreatWithAi(input, _aiScanCategory.value)
-                _lastThreatResult.value = threat
-                repository.saveScanLog(ScanLogEntity(title = "AI Threat Audit: ${threat.title}", scanType = "AI_THREAT", status = if (threat.severity == ThreatSeverity.SAFE) "PASSED" else "WARNING", score = 0, summary = threat.description, detailsJson = threat.recommendation))
-            } finally { _isAiScanning.value = false; rebuildCapabilityEvidence() }
-        }
+    fun updateAiScanCategory(category: String) { _aiScanCategory.value = category }
+    fun runAiThreatScan() {
+        if (_isAiScanning.value || _aiTargetInput.value.isBlank()) return
+        viewModelScope.launch { _isAiScanning.value = true; try { _lastThreatResult.value = repository.analyzeSecurityThreatWithAi(_aiTargetInput.value, _aiScanCategory.value); rebuildCapabilityEvidence() } finally { _isAiScanning.value = false } }
     }
-
-    fun sendChatMessage(message: String) {
+    fun updateChatInput(input: String) { _chatMessages.value = _chatMessages.value + ("user_input" to input) }
+    fun sendSentinelChatMessage(message: String) {
         if (message.isBlank() || _isChatThinking.value) return
-        _chatMessages.value = _chatMessages.value + ("user" to message)
-        viewModelScope.launch {
-            _isChatThinking.value = true
-            try {
-                val response = repository.getSentinelAiChatResponse(message, _chatMessages.value.joinToString("\n") { "${it.first}: ${it.second}" })
-                _chatMessages.value = _chatMessages.value + ("sentinel" to response)
-            } finally { _isChatThinking.value = false }
-        }
+        viewModelScope.launch { _isChatThinking.value = true; try { _chatMessages.value = _chatMessages.value + ("user" to message); val response = repository.askSentinelAi(message); _chatMessages.value = _chatMessages.value + ("sentinel" to response) } finally { _isChatThinking.value = false } }
     }
-
-    fun sendSentinelChatMessage(message: String) = sendChatMessage(message)
-
-    fun updateDarkWebQuery(query: String) { _darkWebQuery.value = query }
-    fun searchBreachData() {
-        if (_isSearchingBreaches.value || _darkWebQuery.value.isBlank()) return
-        viewModelScope.launch {
-            _isSearchingBreaches.value = true
-            try { _breachResults.value = withContext(Dispatchers.IO) { repository.searchBreachData(_darkWebQuery.value) }; _hasSearchedBreaches.value = true }
-            finally { _isSearchingBreaches.value = false; rebuildCapabilityEvidence() }
-        }
+    fun searchBreachData(query: String = _darkWebQuery.value) {
+        _darkWebQuery.value = query
+        viewModelScope.launch { _isSearchingBreaches.value = true; try { _breachResults.value = withContext(Dispatchers.IO) { repository.searchBreachData(_darkWebQuery.value) }; _hasSearchedBreaches.value = true } finally { _isSearchingBreaches.value = false; rebuildCapabilityEvidence() } }
     }
-
     fun searchDarkWebBreaches() = searchBreachData()
-
-    override fun onCleared() {
-        networkEvidenceProvider?.stop()
-        super.onCleared()
-    }
+    fun deleteLog(id: Long) { viewModelScope.launch { repository.deleteLog(id) } }
+    fun clearLogs() { viewModelScope.launch { repository.clearLogs() } }
+    override fun onCleared() { networkEvidenceProvider?.stop(); super.onCleared() }
 }
