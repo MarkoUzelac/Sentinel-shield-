@@ -28,7 +28,7 @@ class WireGuardHandshakeVerifier(
             val now = nowEpochMillis()
             val handshake = transport.latestHandshakeEpochMillis()
             val isFresh = handshake != null &&
-                handshake >= startedAtEpochMillis - clockSkewMillis &&
+                handshake >= startedAtEpochMillis &&
                 handshake <= now + clockSkewMillis
 
             if (transport.isTunnelUp() && isFresh) {

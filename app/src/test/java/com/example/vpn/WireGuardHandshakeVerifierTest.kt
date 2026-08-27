@@ -36,14 +36,13 @@ class WireGuardHandshakeVerifierTest {
     }
 
     @Test
-    fun `verifier rejects handshake older than verification window`() = runTest {
+    fun `verifier rejects handshake from before the current tunnel start`() = runTest {
         val verifier = WireGuardHandshakeVerifier(
-            transport = FakeTransport({ true }, { 0L }),
+            transport = FakeTransport({ true }, { 9_000L }),
             nowEpochMillis = { 10_000L },
             delayMillis = {},
             maxAttempts = 1,
-            pollIntervalMillis = 500L,
-            clockSkewMillis = 5_000L
+            pollIntervalMillis = 500L
         )
 
         val result = verifier.verify(startedAtEpochMillis = 10_000L)
