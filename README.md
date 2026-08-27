@@ -1,6 +1,6 @@
 # 🛡️ SENTINEL SHIELD PRO
 
-> **Privacy-first Android security console with real WireGuard lifecycle verification, evidence provenance, reactive network telemetry, hardware-backed device location and passive radio radar.**
+> **Privacy-first Android security console with evidence-backed network telemetry, passive radio observations, device geolocation and verified WireGuard lifecycle.**
 
 [![Android](https://img.shields.io/badge/Android-24%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com/)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.x-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/)
@@ -9,152 +9,296 @@
 
 ---
 
-## 📊 PROJECT PROGRESS
+## 📊 PROJECT STATUS
 
-### Current engineering completion: **94%**
+### Current engineering checkpoint: **94%**
 
 ```text
 ████████████████████████████████████████████████████████████████████████████████████████████░░░░  94%
 
-IMPLEMENTED / HARDENED                                           EXTERNAL RELEASE GATES
-└───────────────────────────────────────────────────────────────┴─────────────────────────┘
+IMPLEMENTED / HARDENED                                  REMAINING RELEASE GATES
+└───────────────────────────────────────────────────────┴───────────────────────────────┘
+
+✅ Evidence model / freshness                         ⏳ CI production PASS
+✅ Reactive network                                   ⏳ real WireGuard endpoint
+✅ Device GPS/GNSS                                   ⏳ physical Android validation
+✅ Cellular + BLE radar                              ⏳ production keystore/signing
+✅ OpenCellID enrichment                             ⏳ final release validation
+✅ WireGuard lifecycle + handshake                   
+✅ Premium navigation / side menu                    
+✅ Production signing guard                         
 ```
 
-> 94% is an engineering/readiness estimate, not a security certification. 100% requires successful real-device and production-release validation.
+> **94% is an engineering/readiness indicator, not a certification.** The final percentage is reserved for external release evidence: green CI, real endpoint validation, physical-device validation and signed release validation.
 
 ---
 
-## 🎯 CURRENT PRODUCT SCOPE
+## 🎯 PRODUCT DIRECTION
 
-Sentinel Shield is intentionally centered on a small set of user-facing capabilities:
+Sentinel Shield is being consolidated around a single principle:
 
-- **Shield** — centralized security score and Capability/Evidence status.
-- **Radar** — passive cellular + Bluetooth LE observations and tactical visualization.
-- **VPN** — real WireGuard userspace backend with lifecycle + handshake verification.
-- **Call Security** — telephony/MMI checks.
-- **Legal** — jurisdictional guidance.
-- **Vault** — subscription/licensing surface.
+```text
+ANDROID HARDWARE / OS
+        │
+        ├── GPS / GNSS
+        ├── Cellular
+        ├── Bluetooth LE
+        └── Connectivity / VPN
+                │
+                ▼
+       SIGNAL / NETWORK INGESTION
+                │
+                ▼
+       NORMALIZATION + CORRELATION
+                │
+                ▼
+         THREAT / ANOMALY ENGINE
+                │
+                ▼
+        CAPABILITY / EVIDENCE
+                │
+                ▼
+              SHIELD
+                │
+                ▼
+          TACTICAL MAP UI
+```
 
-The primary UX avoids fake “secured” states, fake server telemetry and fake device detections.
+The UI must consume the same evidence-backed state rather than maintaining independent hardcoded security claims.
+
+### Primary user surfaces
+
+- **Shield** — centralized security state and protection overview.
+- **Radar** — passive cellular/BLE observations, signal history and tactical visualization.
+- **VPN** — real WireGuard userspace backend, lifecycle monitoring and handshake verification.
+- **Call Security** — telephony/MMI diagnostics that Android actually exposes.
+- **Legal** — privacy and jurisdiction information.
+- **Vault** — subscription/licensing and appearance settings.
+
+Unnecessary dashboards and duplicate status logic should not be added merely to increase feature count.
 
 ---
 
-## 📡 REAL PASSIVE RADAR
+## 📡 SIGNAL INTELLIGENCE MODEL
 
-The Radar module consumes hardware/OS-backed observations instead of mock signals.
+The radar is designed as a **Signal Intelligence / Correlation Engine**, not a collection of decorative cards.
 
-### Cellular telemetry
+Each observation is normalized into a common timeline so different data sources can be correlated without pretending they are equivalent.
 
-`SignalRadarProvider` reads Android `TelephonyManager.allCellInfo` and normalizes supported records into a common model:
+```text
+CELL + OpenCellID + GPS + BLE + NETWORK + VPN
+                    │
+                    ▼
+             SignalObservation
+                    │
+                    ▼
+          Correlation / Anomaly
+                    │
+                    ▼
+              ThreatSnapshot
+```
 
-- 2G GSM
-- 3G WCDMA
-- 4G LTE
-- 5G NR on supported Android/API levels
-- serving vs. neighboring cells
-- signal level / RSSI when exposed
+### Signal history
+
+A nearby BLE observation can accumulate a history instead of being treated as a one-shot detection:
+
+```text
+BLE-A8F2
+RSSI:       -51 → -57 → -49 → -43 dBm
+duration:   23 s
+distance:   estimated ~4–7 m
+risk:       LOW / WATCH / SUSPICIOUS
+```
+
+The history expresses persistence and movement of the signal. It does **not** establish ownership, identity or GPS coordinates of the other device.
+
+### Cell correlation
+
+For cellular observations, Sentinel can correlate:
+
+- serving cell
+- neighboring cells
 - MCC / MNC
-- cell ID and area code when exposed
+- LAC / TAC / CID when exposed
+- radio technology
+- signal strength
+- device GPS
+- provider-backed tower coordinates
+- network/VPN changes
 
-Android documents `getAllCellInfo()` as returning available registered and neighboring cell information. citeturn0search4
+Example heuristic classification:
 
-### 🗼 OpenCellID tower geolocation
+```text
+0–24    NORMAL
+25–49   WATCH
+50–74   SUSPICIOUS
+75–100  HIGH RISK
+```
 
-The radar now has a real `OpenCellIdProvider` adapter. When `OPEN_CELL_ID_API_KEY` is configured, Sentinel sends the observed **MCC + MNC + area code + cell ID + radio technology** to OpenCellID and can render the provider-backed tower coordinate and reported range on the tactical map.
+> **Anomaly score ≠ proof of an IMSI catcher.** A suspicious score is a defensive heuristic. A `VERIFIED` security claim requires evidence strong enough to support that exact claim.
 
-OpenCellID documents `/cell/get` for resolving a cell position and supports GSM, UMTS, LTE and NR radio types. Availability and usage limits depend on the API-key/account policy. citeturn1search0
+---
 
-The provider result is stored with explicit provenance:
+## 🗼 OPENCELLID TOWER ENRICHMENT
+
+`OpenCellIdProvider` is an enrichment adapter. It is not treated as an unquestionable source of truth.
 
 ```text
 TelephonyManager
       ↓
 real cell identity
       ↓
-OpenCellID
+OpenCellID lookup
       ↓
-real tower coordinate
+provider-backed tower coordinate
       ↓
-locationSource = OpenCellID
+GPS / distance / consistency correlation
 ```
 
-If the key is missing, the provider fails closed to the device's real location rather than manufacturing a tower coordinate.
+The adapter uses the observed cell identity where available:
 
-### Bluetooth LE telemetry
+- MCC
+- MNC
+- LAC/TAC
+- Cell ID
+- radio technology
 
-The radar uses Android's BLE scanner to observe nearby advertisements when the user grants the required permissions. Android requires `BLUETOOTH_SCAN` on modern Android versions and location permission may also be required depending on the scan configuration. citeturn0search0turn0search2
+The resulting evidence carries provenance and reported location accuracy/range where the provider supplies it.
 
-Each observation includes:
+### Location consistency
 
+Sentinel should detect inconsistent combinations such as:
+
+```text
+DEVICE GPS = A
+TOWER = B
+EXPECTED RANGE = X
+ACTUAL GEOMETRY = inconsistent
+```
+
+and surface **LOCATION INCONSISTENCY** rather than silently drawing a trustworthy-looking pin.
+
+The repository intentionally keeps only an API-key placeholder. Never commit a real OpenCellID secret.
+
+```text
+OPEN_CELL_ID_API_KEY=...
+```
+
+A key that has appeared in chat, screenshots, commits or public logs must be revoked/rotated before production use.
+
+---
+
+## 📶 PASSIVE RADIO CAPABILITIES
+
+### Cellular
+
+Android `TelephonyManager` is used for OS-exposed serving/neighbor cell information. Depending on device, carrier and Android version, the app may receive:
+
+- GSM / 2G
+- WCDMA / 3G
+- LTE / 4G
+- NR / 5G
+- serving and neighboring cells
+- signal strength
+- cell identity fields
+
+Availability differs by hardware, carrier, permission and platform behavior.
+
+### Bluetooth LE
+
+The app uses Android's BLE scanning APIs when the relevant permissions are granted. Observations can include:
+
+- advertisement presence
 - RSSI
-- runtime timestamp
-- stable privacy-preserving local identifier (hash, not raw MAC in the UI)
-- BLE technology classification
-- coarse RSSI-derived distance estimate when TX power is available
+- timestamp
+- local privacy-preserving identifier
+- estimated distance when adequate telemetry is available
 
-The app does not claim to know the owner or identity of a nearby device from BLE advertising alone.
+### Device GPS/GNSS
 
-### Device geolocation
-
-`DeviceLocationProvider` uses Android location providers and GNSS status to expose the device's own runtime location:
+The user's own device location can include:
 
 - latitude / longitude
 - accuracy
 - altitude
 - speed
 - bearing
-- satellite count
-- provider name
+- provider
+- satellite information
 - timestamp / freshness
 
-No coordinates are invented when the OS does not provide a valid fix.
-
-### Tactical visualization
-
-`TacticalRadarMap` renders the runtime signal picture around the **actual device position**.
-
-- device GPS position = real coordinate
-- BLE distance = estimate, without invented direction
-- cellular observation = real radio observation
-- tower coordinate = shown only when backed by a real geolocation provider
-- no fake tower pins are generated from arbitrary offsets
+The app must not manufacture a location when Android has not provided a valid fix.
 
 ---
 
-## 🧭 WHAT THE PHONE CAN AND CANNOT DETECT
+## 🗺️ TACTICAL MAP
 
-Android applications are constrained by radio hardware, OS permissions and the privacy model. Sentinel therefore uses a strict capability boundary.
+The tactical map is a visualization of **evidence**, not a fictional military-grade locator.
 
-### Supported
+```text
+📍 DEVICE
+   real GNSS coordinate
 
-- passive BLE advertisement discovery
-- Android-exposed cellular neighbor/serving-cell telemetry
-- real tower coordinates from a configured cell-geolocation provider
-- the device's own GPS/GNSS position
-- current network transports and validated state
-- VPN transport state and WireGuard peer handshake evidence
+◯ BLE
+   signal zone / distance estimate
+   no invented direction
 
-### Not claimed
+◎ CELL
+   Android cell observation
 
-Sentinel cannot, using ordinary Android application APIs alone:
+🗼 TOWER
+   pin only when backed by provider evidence
+```
 
-- extract IMSIs of surrounding subscribers
-- identify a person from a nearby phone's radio signal
-- obtain another person's GPS location merely because their phone is nearby
-- reliably determine a third-party phone's GPS coordinate from RSSI alone
-- physically disable an external cell tower
-- jam cellular/Bluetooth frequencies
-- guarantee that a cell site is malicious from `CellInfo` alone
-- silently access another person's device-location service
-- scan arbitrary Internet devices without an explicit, authorized network-access workflow
+The map can provide:
 
-For other devices, the supported nearby-discovery path is **OS-mediated BLE/cellular observation**. A third-party device's precise location requires that device's own consented location-sharing mechanism or another authorized service; it cannot be inferred from the phone's location service alone.
+- live device position
+- recentering
+- cell/tower overlays
+- BLE signal zones
+- signal-detail panels
+- provider provenance
+- map/open-location actions for supported evidence
+- radar sweep visualization
+- zoom/pan controls
+
+A nearby device's precise GPS location is **not** inferred from the phone's own location service. Precise third-party location requires that device's own consented sharing mechanism or another authorized service.
 
 ---
 
-## 🔐 EVIDENCE MODEL
+## 🧭 THREAT CORRELATION
 
-Every security capability is normalized to:
+Threat detection is based on combining independent observations instead of turning one weak signal into a definitive accusation.
+
+Example:
+
+```text
+RADAR
+LTE anomaly
+   +
+NETWORK
+unexpected transport change
+   +
+LOCATION
+rapid cell transition
+   +
+VPN
+fresh handshake missing
+   ↓
+CORRELATION ENGINE
+   ↓
+THREATSNAPSHOT
+   ↓
+WATCH / SUSPICIOUS / HIGH RISK
+```
+
+The same `ThreatSnapshot` should feed both Radar and Shield so the application has one security source of truth.
+
+---
+
+## 🔐 CAPABILITY / EVIDENCE STATES
+
+Every capability uses the canonical state model:
 
 ```text
 VERIFIED
@@ -162,170 +306,209 @@ UNVERIFIED
 UNAVAILABLE
 ```
 
-Evidence carries provenance and expiry. A stale result automatically degrades instead of remaining visually trustworthy forever.
-
-### Examples
+Evidence is time-aware and provenance-aware.
 
 ```text
-WireGuard transport + fresh peer handshake
-                ↓
-             VERIFIED
+fresh + authoritative evidence
+            ↓
+         VERIFIED
 
-Cellular telemetry / BLE observation
-                ↓
-            UNVERIFIED
+available observation, insufficient proof
+            ↓
+        UNVERIFIED
 
-OpenCellID tower coordinate
-                ↓
-       provider-backed evidence
-
-No telephony capability / missing permission
-                ↓
-           UNAVAILABLE
+unsupported / denied / unavailable
+            ↓
+        UNAVAILABLE
 ```
+
+Stale evidence must degrade rather than remain visually trustworthy forever.
+
+All major time-sensitive capabilities should use the same injectable `EvidenceClock` so deterministic tests can exercise:
+
+```text
+LIVE → STALE → UNVERIFIED → UNAVAILABLE
+```
+
+without waiting on wall-clock time.
 
 ---
 
 ## 🔒 VPN ARCHITECTURE
 
-The VPN uses the official WireGuard Android userspace backend.
+Sentinel uses the real WireGuard Android userspace backend and verifies tunnel health using lifecycle state plus peer handshake evidence.
 
 ```text
-Android VPN permission
-        ↓
-WireGuard GoBackend
-        ↓
+VPN permission
+      ↓
+GoBackend
+      ↓
 Tunnel lifecycle
-        ↓
-Handshake verifier
-        ↓
-Fresh peer evidence
-        ↓
+      ↓
+Peer handshake
+      ↓
+Freshness / provenance
+      ↓
 VERIFIED
 ```
 
-If transport or handshake health disappears, the controller fails closed and stops the transport.
+If critical transport evidence disappears, the controller fails closed instead of showing a stale protected state.
 
-The primary UI no longer requires the user to understand `.conf` files. A real managed endpoint/profile must still exist outside the UI flow; Sentinel will not invent a server or credential.
+### No `.conf` burden in the primary UX
 
----
+The user-facing flow should not require manually browsing for and importing `.conf` files.
 
-## 🌐 NETWORK LAYER
+However, a **real WireGuard endpoint, peer credentials and provisioning source must still exist**. UI code cannot legitimately create a working remote VPN service without an actual server/endpoint and valid cryptographic configuration.
 
-Network state is observed reactively through `ConnectivityManager.NetworkCallback`.
-
-The model can surface:
-
-- active transports
-- network validation state
-- VPN transport state
-- DNS servers from `LinkProperties`
-- interface name
-- blocked state
-
-Network telemetry is evidence, not a blanket claim that the current network is safe.
-
-The app intentionally avoids aggressive network-wide probing as a default security feature. This reduces battery usage and keeps the product focused on defensive, OS-mediated telemetry.
-
----
-
-## 🗺️ MAP PROVENANCE
+The production goal is:
 
 ```text
-DEVICE GPS
-   └── REAL COORDINATE
-
-CELL ID + OpenCellID
-   └── PROVIDER-BACKED TOWER COORDINATE
-
-BLE RSSI
-   └── DISTANCE ESTIMATE / SIGNAL ZONE
-
-UNKNOWN
-   └── NO PIN
+managed provisioning
+      ↓
+secure profile delivery
+      ↓
+GoBackend
+      ↓
+real handshake
+      ↓
+VERIFIED
 ```
 
-Google Maps can be opened for the device's own current coordinates using a standard geo intent. Tower pins are rendered only when a real provider supplies coordinates.
-
----
-
-## 🔑 SECRET CONFIGURATION
-
-Never commit API keys to GitHub.
-
-Configure the OpenCellID key through the AI Studio/CI secret store as:
+not:
 
 ```text
-OPEN_CELL_ID_API_KEY=...
+fake toggle
+      ↓
+"Protected Connection"
 ```
-
-The repository only contains the placeholder in `.env.example`.
-
-**If an API key has ever been pasted into chat, a commit, screenshot or public log, rotate/revoke that key and issue a new one.**
 
 ---
 
-## 🧪 TESTING
+## 🛡️ DEFENSIVE ACTIONS
 
-Recommended verification order:
+Actions are named according to what Android can actually enforce.
+
+| Action | Meaning |
+|---|---|
+| **BLOCK NETWORK** | Apply supported local VPN/routing policy to restrict traffic. |
+| **BLOCK APP** | Use Android-supported controls where available; never imply universal app termination. |
+| **IGNORE SIGNAL** | Suppress a local BLE/cellular observation from repeated warnings. |
+| **DISMISS** | Close an alert without changing the underlying radio/network state. |
+
+Sentinel does **not** claim it can physically disable external towers, jam frequencies, extract IMSIs from unrelated subscribers, or shut down another person's phone.
+
+---
+
+## 🕶️ PRIVACY / STEALTH MODE
+
+The practical meaning of "stealth" is **reduced digital exposure**, not radio-spectrum invisibility.
+
+A defensible privacy mode can combine:
+
+- verified VPN when available
+- DNS protection / audit
+- background network reduction
+- ad/telemetry filtering
+- Bluetooth discoverability guidance
+- location-sharing audit
+- permission audit
+- public-IP check
+- sensitive-app exposure review
+
+Each item should report its own evidence state instead of turning the entire mode into a blanket `SECURED` label.
+
+---
+
+## 🚨 WHAT ANDROID CANNOT PROVIDE
+
+Using ordinary Android application APIs alone, Sentinel cannot reliably:
+
+- read IMSIs of surrounding subscribers
+- identify the owner of a nearby phone from passive BLE/cellular telemetry
+- retrieve another person's GPS location simply because the phone is nearby
+- infer an arbitrary nearby phone's exact GPS position from RSSI
+- jam cellular/Bluetooth frequencies
+- remotely disable an external cell tower
+- prove an IMSI catcher solely from `CellInfo`
+- silently access another person's location-sharing service
+- scan arbitrary Internet devices without an explicit, authorized workflow
+
+These are product boundaries, not missing UI buttons.
+
+---
+
+## 🌐 NETWORK TELEMETRY
+
+The network layer is reactive and should prefer `ConnectivityManager.NetworkCallback` over continuous polling.
+
+It can expose evidence such as:
+
+- active transport
+- validation state
+- VPN transport
+- interface information
+- DNS servers through `LinkProperties`
+- blocked/restricted state
+
+Network evidence is correlated into the same threat snapshot as radar and VPN evidence.
+
+---
+
+## 🧪 CI / VALIDATION
+
+The required production validation order is:
 
 ```text
-Gradle configuration
-        ↓
-assembleRelease
-        ↓
-unit tests
-        ↓
-lint
-        ↓
-security checks
-        ↓
-production gate
-        ↓
-physical Android validation
+1. Verify Gradle configuration
+            ↓
+2. Assemble release
+            ↓
+3. Unit tests
+            ↓
+4. Android lint
+            ↓
+5. Security / secret checks
+            ↓
+6. Production gate
+            ↓
+7. Physical Android validation
+            ↓
+8. Signed release validation
 ```
 
-Virtual coroutine time (`runTest` + dispatcher-controlled time advancement) should be used for lifecycle timeout tests so no test waits on real time.
+The GitHub Actions workflow must not be considered green because configuration merely starts. The production gate is green only when the complete chain succeeds.
+
+### Current CI blocker
+
+The latest inspected run is **Android CI #185**, commit `3cb36ad5bf82967c589c7ee7098254117483e3a3`. The build stopped during **Verify Gradle configuration** because the Kotlin DSL referenced a non-existent version-catalog accessor:
+
+```text
+libs.compose.ui.test.manifest
+```
+
+The catalog defines the dependency as:
+
+```text
+androidx-compose-ui-test-manifest
+```
+
+so the correct Kotlin DSL accessor is:
+
+```text
+libs.androidx.compose.ui.test.manifest
+```
+
+This was corrected on `main` in commit:
+
+```text
+26185248e37b4b8c333d52e8849f8a1acadf09c5
+```
+
+Android CI #186 was automatically queued for that commit. Do not label the build PASS until its actual jobs report success.
 
 ---
 
-## 🚦 PRODUCTION READINESS GATES
-
-The remaining gates are external validation items rather than reasons to add more UI:
-
-- real WireGuard endpoint/profile provisioning
-- physical Android device validation across relevant API levels
-- release keystore/signing verification
-- final CI production gate
-- end-to-end freshness/race validation on device
-
----
-
-## 🛡️ DESIGN PRINCIPLES
-
-### 1. No fake verification
-
-A switch or UI animation never equals proof of security.
-
-### 2. No fake coordinates
-
-If Android or a configured geolocation provider does not provide a coordinate, Sentinel does not manufacture one.
-
-### 3. No invasive radio claims
-
-BLE and cellular observations are treated as telemetry, not identity extraction.
-
-### 4. Fail closed
-
-A missing critical VPN health signal stops the tunnel rather than presenting stale protection.
-
-### 5. Premium UX, minimal cognitive load
-
-Primary screens expose the action and the security state first. Advanced diagnostics remain secondary.
-
----
-
-## 📁 IMPORTANT RUNTIME COMPONENTS
+## 📁 CORE ARCHITECTURE
 
 ```text
 app/src/main/java/com/example/
@@ -338,22 +521,104 @@ app/src/main/java/com/example/
 │       ├── CapabilityEvidence.kt
 │       ├── CapabilityEvidenceSnapshot.kt
 │       ├── DeviceLocationState.kt
-│       └── SignalRadarModels.kt
+│       └── signal / threat models
+│
 ├── ui/
 │   ├── components/
-│   │   └── TacticalRadarMap.kt
+│   │   ├── CapabilityEvidenceCard.kt
+│   │   ├── ShieldGaugeCard.kt
+│   │   └── Tactical radar/map components
 │   └── screens/
-│       └── ImsiRadarScreen.kt
+│       ├── DashboardScreen.kt
+│       ├── ImsiRadarScreen.kt
+│       ├── VpnManagerScreen.kt
+│       └── CallSecurityScreen.kt
+│
 └── vpn/
     ├── WireGuardProfileStore.kt
     └── WireGuardTunnelController.kt
 ```
 
+The long-term invariant is:
+
+```text
+one observation model
+        ↓
+one correlation engine
+        ↓
+one ThreatSnapshot
+        ↓
+one Capability/Evidence truth
+        ↓
+multiple presentation surfaces
+```
+
 ---
 
-## ⚠️ SECURITY / PRIVACY NOTE
+## 🎨 PREMIUM UX PRINCIPLES
 
-Sentinel Shield is designed as a defensive local security console. It deliberately does not provide frequency jamming, subscriber-identity extraction, or covert tracking of third-party devices. All threat conclusions are tied to the strength and provenance of the evidence actually available to the Android runtime.
+### One source of truth
+
+Shield, Radar and other modules must render the same evidence-derived security state.
+
+### Minimal cognitive load
+
+Primary screens show:
+
+```text
+STATUS
+WHAT WAS OBSERVED
+WHY IT MATTERS
+WHAT YOU CAN DO
+```
+
+Advanced diagnostics remain secondary.
+
+### No fake certainty
+
+Never use a green animation or switch to imply proof that the underlying capability did not provide.
+
+### No fake maps
+
+No invented tower coordinates, no fabricated nearby-phone GPS pins and no arbitrary "rogue" markers presented as real-world facts.
+
+### Premium but honest
+
+The interface can remain cinematic, tactical and visually distinctive while every security claim remains evidence-backed.
+
+---
+
+## 🔑 SECRETS
+
+Never commit API keys, signing credentials, Firebase secrets, WireGuard private keys or provider tokens.
+
+Use the project/CI secret store for values such as:
+
+```text
+OPEN_CELL_ID_API_KEY
+```
+
+and keep only placeholders in the repository.
+
+Any secret exposed through chat, screenshots, public commits or logs should be considered compromised and rotated.
+
+---
+
+## ✅ RELEASE DEFINITION
+
+Sentinel Shield is **production-ready** only when all of the following are demonstrated:
+
+```text
+✅ Complete CI compile/build/test/lint/security gate
+✅ Real WireGuard endpoint and fresh handshake
+✅ Physical Android validation on representative API levels
+✅ Production signing credentials and signed artifact
+✅ Final evidence freshness/race validation
+✅ No mock data presented as real telemetry
+✅ No hardcoded VERIFIED security state
+```
+
+Until those proofs exist, the correct state is **94% engineering completion**, not 100% production certification.
 
 ---
 
@@ -362,23 +627,36 @@ Sentinel Shield is designed as a defensive local security console. It deliberate
 ```text
 94%
  │
- ├── ✅ Premium UI / navigation
- ├── ✅ Central Evidence model
+ ├── ✅ Evidence / provenance model
  ├── ✅ Reactive network telemetry
- ├── ✅ Hardware-backed device geolocation
+ ├── ✅ Device GPS/GNSS
+ ├── ✅ Cellular telemetry
  ├── ✅ Passive BLE radar
- ├── ✅ Cellular telemetry radar
- ├── ✅ OpenCellID tower adapter
- ├── ✅ Provider provenance for tower coordinates
- ├── ✅ Tactical signal visualization
- ├── ✅ WireGuard lifecycle + handshake verification
+ ├── ✅ OpenCellID enrichment
+ ├── ✅ Signal correlation architecture
+ ├── ✅ ThreatSnapshot direction
+ ├── ✅ WireGuard lifecycle / handshake verification
+ ├── ✅ Production signing guard
+ ├── ✅ Premium UI / side navigation
+ ├── ✅ CI Kotlin DSL accessor autofix
  │
+ ├── 🔄 Android CI #186
  ├── ⏳ CI production PASS
  ├── ⏳ real WireGuard endpoint
- ├── ⏳ physical device matrix
- ├── ⏳ production signing
+ ├── ⏳ physical Android validation
+ ├── ⏳ production signing credentials
  └── ⏳ final release validation
  │
  ▼
 100% PRODUCTION READINESS
 ```
+
+---
+
+## 🔗 REPOSITORY
+
+**Sentinel Shield Pro**  
+https://github.com/MarkoUzelac/Sentinel-shield-
+
+**GitHub Actions**  
+https://github.com/MarkoUzelac/Sentinel-shield-/actions
