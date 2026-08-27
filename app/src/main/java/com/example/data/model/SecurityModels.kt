@@ -8,14 +8,15 @@ data class VpnServer(
     val pingMs: Int,
     val loadPercentage: Int,
     val ipAddress: String,
-    val protocol: String = "WireGuard Pro",
+    val protocol: String = "WireGuard",
+    val port: Int = 51820,
     val isPremium: Boolean = false
 )
 
 data class ThreatItem(
     val id: String,
     val title: String,
-    val category: String, // "Phishing", "Permissions", "Network Leak", "System Bug", "Malware"
+    val category: String,
     val severity: ThreatSeverity,
     val description: String,
     val recommendation: String,
@@ -23,9 +24,7 @@ data class ThreatItem(
     val isResolved: Boolean = false
 )
 
-enum class ThreatSeverity {
-    CRITICAL, HIGH, MEDIUM, LOW, SAFE
-}
+enum class ThreatSeverity { CRITICAL, HIGH, MEDIUM, LOW, SAFE }
 
 data class BreachRecord(
     val id: String,
@@ -38,8 +37,8 @@ data class BreachRecord(
 
 data class JurisdictionInfo(
     val country: String,
-    val allianceGroup: String, // "5-Eyes", "9-Eyes", "14-Eyes", "Privacy Haven"
-    val privacyScore: Int,      // 0 - 100
+    val allianceGroup: String,
+    val privacyScore: Int,
     val dataRetentionLaw: String,
     val gdprCompliant: Boolean,
     val summary: String
@@ -51,7 +50,7 @@ data class NetworkSpeedResult(
     val uploadMbps: Double,
     val jitterMs: Double,
     val wifiSsid: String,
-    val securityEncryption: String, // "WPA3-Personal", "WPA2-Enterprise", "Open (Insecure)"
+    val securityEncryption: String,
     val isDnsSecure: Boolean,
     val publicIp: String
 )
