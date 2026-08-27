@@ -18,8 +18,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
@@ -51,8 +51,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.model.CapabilityId
 import com.example.data.model.CapabilityEvidence
+import com.example.data.model.CapabilityId
 import com.example.ui.components.CapabilityModuleHeader
 import com.example.ui.screens.AiScannerScreen
 import com.example.ui.screens.CallSecurityScreen
@@ -70,7 +70,7 @@ import com.example.ui.theme.SentinelShieldTheme
 import com.example.ui.theme.TextMuted
 import com.example.ui.viewmodel.MainViewModel
 
-a class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
     private val vpnConsentLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
