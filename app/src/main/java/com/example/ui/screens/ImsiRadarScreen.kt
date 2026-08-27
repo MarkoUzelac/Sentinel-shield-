@@ -13,10 +13,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.CapabilityEvidenceSnapshot
 import com.example.data.model.CapabilityId
 import com.example.ui.components.CapabilityEvidenceCard
 import com.example.ui.theme.LocalAppSkin
@@ -29,7 +31,8 @@ fun ImsiRadarScreen(
 ) {
     val skin = LocalAppSkin.current
     val evidence by viewModel.capabilityEvidence.collectAsState()
-    val radarEvidence = evidence.firstOrNull { it.id == CapabilityId.RADAR_TELEPHONY }
+    val evidenceSnapshot = remember(evidence) { CapabilityEvidenceSnapshot.from(evidence) }
+    val radarEvidence = evidenceSnapshot.get(CapabilityId.RADAR_TELEPHONY)
     val observation by viewModel.radarObservation.collectAsState()
 
     Column(
