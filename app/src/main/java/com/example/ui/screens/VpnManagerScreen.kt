@@ -68,7 +68,15 @@ fun VpnManagerScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
         item {
             Text("WIREGUARD VPN LIFECYCLE", 12.sp, FontWeight.Bold, TextMuted, letterSpacing = 1.sp)
             Spacer(Modifier.height(4.dp))
-            Text("Connected is shown only after a verified WireGuard handshake.", 13.sp, color = TextSecondary)
+            Text("Connected is shown only after a verified WireGuard peer handshake.", 13.sp, color = TextSecondary)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                if (viewModel.isVpnProvisioned) "REAL PROFILE PROVISIONED" else "PROFILE NOT PROVISIONED",
+                10.sp,
+                FontWeight.Bold,
+                if (viewModel.isVpnProvisioned) CyberGreen else TextMuted,
+                letterSpacing = 1.sp
+            )
         }
 
         item {
@@ -109,9 +117,9 @@ fun VpnManagerScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                             is WireGuardTunnelState.Connected -> "Encrypted transport verified. Handshake: ${state.latestHandshakeEpochSeconds}"
                             is WireGuardTunnelState.Error -> state.message
                             is WireGuardTunnelState.AwaitingUserConsent -> "Approve Android VPN permission to continue."
-                            is WireGuardTunnelState.Starting -> "Starting WireGuard transport."
-                            is WireGuardTunnelState.Verifying -> "Waiting for a recent peer handshake (attempt ${state.attempt}/10)."
-                            WireGuardTunnelState.Disconnected -> "No verified VPN transport is active."
+                            is WireGuardTunnelState.Starting -> "Starting the official WireGuard userspace backend."
+                            is WireGuardTunnelState.Verifying -> "Waiting for a recent peer handshake (attempt ${state.attempt}/20)."
+                            WireGuardTunnelState.Disconnected -> if (viewModel.isVpnProvisioned) "Ready to start the provisioned WireGuard profile." else "Provision a real WireGuard profile before connecting."
                         },
                         fontSize = 12.sp,
                         color = TextSecondary,
@@ -120,7 +128,7 @@ fun VpnManagerScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                     Spacer(Modifier.height(20.dp))
                     Button(
                         onClick = { viewModel.toggleVpnConnection() },
-                        enabled = !isStarting,
+                        enabled = !isStarting && viewModel.isVpnProvisioned,
                         colors = ButtonDefaults.buttonColors(containerColor = if (isConnected) CyberGreen else CyberCyan, contentColor = DarkBackground),
                         shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.fillMaxWidth().height(50.dp).testTag("btn_toggle_vpn")
@@ -129,7 +137,7 @@ fun VpnManagerScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                             CircularProgressIndicator(Modifier.size(18.dp), color = DarkBackground, strokeWidth = 2.dp)
                             Spacer(Modifier.width(8.dp))
                         }
-                        Text(if (isConnected) "Disconnect VPN" else "Start VPN Lifecycle", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text(if (isConnected) "Disconnect VPN" else "Start Verified VPN", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     }
                 }
             }
