@@ -10,7 +10,6 @@ import androidx.activity.viewModels
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,8 +18,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
@@ -39,8 +38,8 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +51,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.CapabilityId
+import com.example.data.model.CapabilityEvidence
+import com.example.ui.components.CapabilityModuleHeader
 import com.example.ui.screens.AiScannerScreen
 import com.example.ui.screens.CallSecurityScreen
 import com.example.ui.screens.DarkWebMonitorScreen
@@ -68,7 +70,7 @@ import com.example.ui.theme.SentinelShieldTheme
 import com.example.ui.theme.TextMuted
 import com.example.ui.viewmodel.MainViewModel
 
-class MainActivity : ComponentActivity() {
+a class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
     private val vpnConsentLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -116,6 +118,7 @@ fun SentinelShieldApp(viewModel: MainViewModel, onImportWireGuardProfile: () -> 
     var selectedTab by remember { mutableIntStateOf(0) }
     var secondary by remember { mutableStateOf<SecondaryScreen?>(null) }
     val tabs = SentinelTab.values()
+    val evidence by viewModel.capabilityEvidence.collectAsState()
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -154,9 +157,9 @@ fun SentinelShieldApp(viewModel: MainViewModel, onImportWireGuardProfile: () -> 
             }
             Box(Modifier.weight(1f)) {
                 when {
-                    secondary == SecondaryScreen.AI -> AiScannerScreen(viewModel)
-                    secondary == SecondaryScreen.NETWORK -> NetworkSpeedScreen(viewModel)
-                    secondary == SecondaryScreen.DARK_WEB -> DarkWebMonitorScreen(viewModel)
+                    secondary == SecondaryScreen.AI -> EvidenceWrappedScreen(evidence, CapabilityId.AI_THREAT_ANALYSIS) { AiScannerScreen(viewModel) }
+                    secondary == SecondaryScreen.NETWORK -> EvidenceWrappedScreen(evidence, CapabilityId.NETWORK_AUDIT) { NetworkSpeedScreen(viewModel) }
+                    secondary == SecondaryScreen.DARK_WEB -> EvidenceWrappedScreen(evidence, CapabilityId.DARK_WEB_LOOKUP) { DarkWebMonitorScreen(viewModel) }
                     else -> when (selectedTab) {
                         0 -> DashboardScreen(
                             viewModel = viewModel,
@@ -171,11 +174,25 @@ fun SentinelShieldApp(viewModel: MainViewModel, onImportWireGuardProfile: () -> 
                         1 -> ImsiRadarScreen(viewModel)
                         2 -> VpnManagerScreen(viewModel, onImportWireGuardProfile)
                         3 -> CallSecurityScreen(viewModel)
-                        4 -> LegalProtectionScreen()
+                        4 -> EvidenceWrappedScreen(evidence, CapabilityId.LEGAL_GUIDANCE) { LegalProtectionScreen() }
                         5 -> SettingsScreen()
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun EvidenceWrappedScreen(
+    evidence: List<CapabilityEvidence>,
+    capabilityId: CapabilityId,
+    content: @Composable () -> Unit
+) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 10.dp)) {
+        CapabilityModuleHeader(evidence.firstOrNull { it.id == capabilityId })
+        Box(Modifier.weight(1f)) {
+            content()
         }
     }
 }
