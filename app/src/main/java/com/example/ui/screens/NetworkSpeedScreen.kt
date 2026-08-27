@@ -64,11 +64,10 @@ fun NetworkSpeedScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) 
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Text("NETWORK SECURITY & LATENCY AUDIT", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 1.sp)
+            Text(text = "NETWORK SECURITY & LATENCY AUDIT", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 1.sp)
             Spacer(Modifier.height(4.dp))
-            Text("Stvarni HTTPS probe + runtime podaci iz ConnectivityManagera. Mjerenje dostupnosti nije dokaz potpune mrežne sigurnosti.", fontSize = 13.sp, color = TextSecondary)
+            Text(text = "Stvarni HTTPS probe + runtime podaci iz ConnectivityManagera. Mjerenje dostupnosti nije dokaz potpune mrežne sigurnosti.", fontSize = 13.sp, color = TextSecondary)
         }
-
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -89,47 +88,38 @@ fun NetworkSpeedScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) 
                             drawArc(Brush.sweepGradient(listOf(CyberCyan, CyberGreen)), 135f, 270f * fraction, false, style = Stroke(strokeWidth, cap = StrokeCap.Round))
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(result?.pingMs?.takeIf { it >= 0 }?.let { "%.0f".format(it) } ?: "—", fontSize = 36.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                            Text(if (result != null && result!!.pingMs >= 0) "HTTPS RTT ms" else "NO RESULT", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = if (result != null) CyberGreen else TextMuted, letterSpacing = 1.sp)
+                            Text(text = result?.pingMs?.takeIf { it >= 0 }?.let { "%.0f".format(it) } ?: "—", fontSize = 36.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                            Text(text = if (result != null && result!!.pingMs >= 0) "HTTPS RTT ms" else "NO RESULT", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = if (result != null) CyberGreen else TextMuted, letterSpacing = 1.sp)
                         }
                     }
                     Spacer(Modifier.height(16.dp))
-                    Button(
-                        onClick = viewModel::runSpeedAndSecurityAudit,
-                        enabled = !isTesting,
-                        colors = ButtonDefaults.buttonColors(containerColor = CyberGreen, contentColor = DarkBackground),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth().height(48.dp)
-                    ) {
+                    Button(onClick = viewModel::runSpeedAndSecurityAudit, enabled = !isTesting, colors = ButtonDefaults.buttonColors(containerColor = CyberGreen, contentColor = DarkBackground), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().height(48.dp)) {
                         if (isTesting) {
                             CircularProgressIndicator(Modifier.size(20.dp), color = DarkBackground, strokeWidth = 2.dp)
                             Spacer(Modifier.width(8.dp))
-                            Text("Pokretanje probe…", fontWeight = FontWeight.Bold)
+                            Text(text = "Pokretanje probe…", fontWeight = FontWeight.Bold)
                         } else {
                             Icon(Icons.Default.Refresh, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
-                            Text("Pokreni mrežni audit", fontWeight = FontWeight.Bold)
+                            Text(text = "Pokreni mrežni audit", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             }
         }
-
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 NetworkMetricCard("Transport", observation.transports.ifEmpty { setOf("N/A") }.joinToString(), "Runtime", CyberCyan, Modifier.weight(1f))
                 NetworkMetricCard("VPN", if (observation.vpnTransport) "ACTIVE" else "NOT DETECTED", "Runtime", CyberGreen, Modifier.weight(1f))
             }
         }
-
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 NetworkMetricCard("HTTPS RTT", result?.pingMs?.takeIf { it >= 0 }?.let { "%.0f ms".format(it) } ?: "—", "Stvarno mjerenje", CyberCyan, Modifier.weight(1f))
                 NetworkMetricCard("DNS", if (observation.dnsServers.isEmpty()) "N/A" else observation.dnsServers.size.toString(), "Poslužitelji", CyberGreen, Modifier.weight(1f))
             }
         }
-
-        item { Text("RUNTIME NETWORK EVIDENCE", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 1.sp) }
+        item { Text(text = "RUNTIME NETWORK EVIDENCE", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 1.sp) }
         item { NetworkEvidenceCard(observation, result) }
     }
 }
@@ -138,10 +128,10 @@ fun NetworkSpeedScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) 
 private fun NetworkMetricCard(title: String, value: String, subtitle: String, accent: Color, modifier: Modifier) {
     Card(modifier = modifier, shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = DarkCard), border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DarkCardBorder))) {
         Column(Modifier.padding(14.dp)) {
-            Text(title, fontSize = 10.sp, color = TextMuted)
+            Text(text = title, fontSize = 10.sp, color = TextMuted)
             Spacer(Modifier.height(4.dp))
-            Text(value, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-            Text(subtitle, fontSize = 9.sp, color = accent)
+            Text(text = value, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Text(text = subtitle, fontSize = 9.sp, color = accent)
         }
     }
 }
@@ -161,7 +151,7 @@ private fun NetworkEvidenceCard(observation: NetworkObservation, result: Network
             EvidenceRow(Icons.Default.Router, "Sučelje", observation.interfaceName ?: "N/A")
             EvidenceRow(Icons.Default.Lock, "DNS", observation.dnsServers.ifEmpty { listOf("N/A") }.joinToString())
             EvidenceRow(Icons.Default.Shield, "HTTPS probe", if (result != null && result.pingMs >= 0) "PASS (reachability)" else "NOT RUN")
-            Text("Status: UNVERIFIED — runtime mrežna evidencija ne dokazuje potpunu sigurnost mreže.", fontSize = 11.sp, color = CyberOrange)
+            Text(text = "Status: UNVERIFIED — runtime mrežna evidencija ne dokazuje potpunu sigurnost mreže.", fontSize = 11.sp, color = CyberOrange)
         }
     }
 }
@@ -172,8 +162,8 @@ private fun EvidenceRow(icon: androidx.compose.ui.graphics.vector.ImageVector, l
         Icon(icon, contentDescription = null, tint = CyberCyan, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(10.dp))
         Column {
-            Text(label, fontSize = 10.sp, color = TextMuted)
-            Text(value, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Text(text = label, fontSize = 10.sp, color = TextMuted)
+            Text(text = value, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
         }
     }
 }
