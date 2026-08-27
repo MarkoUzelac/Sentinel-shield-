@@ -25,5 +25,13 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      - name: Set up Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "9.3.1"
+
       - name: Generate and submit dependency graph
         uses: gradle/actions/dependency-submission@v6
+        with:
+          gradle-version: "9.3.1"
+          additional-arguments: "--no-configuration-cache"
