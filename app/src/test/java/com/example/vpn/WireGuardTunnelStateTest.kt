@@ -11,8 +11,9 @@ class WireGuardTunnelStateTest {
     }
 
     @Test
-    fun connectedStateIsExplicitlyVerified() {
-        val state: WireGuardTunnelState = WireGuardTunnelState.Connected
+    fun connectedStateCarriesVerifiedHandshakeEvidence() {
+        val state: WireGuardTunnelState = WireGuardTunnelState.Connected(1L)
         assertTrue(state is WireGuardTunnelState.Connected)
+        assertTrue(state.latestHandshakeEpochSeconds > 0L)
     }
 }
