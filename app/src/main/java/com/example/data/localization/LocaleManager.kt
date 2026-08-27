@@ -1,5 +1,6 @@
 package com.example.data.localization
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -61,4 +62,5 @@ object LocaleManager {
 
 val LocalAppLanguage = staticCompositionLocalOf { AppLanguage.HR }
 
+@Composable
 fun stringRes(key: String): String = LocaleManager.getString(key, LocalAppLanguage.current)
