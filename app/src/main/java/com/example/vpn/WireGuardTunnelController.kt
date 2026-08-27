@@ -21,11 +21,16 @@ class WireGuardTunnelController(
     private val transport: WireGuardTransport = GoWireGuardTransport(context),
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main.immediate),
     private val invariants: List<WireGuardInvariant> = WireGuardInvariants.registry,
-    private val journal: WireGuardTransitionJournal = WireGuardTransitionJournal()
+    private val journal: WireGuardTransitionJournal = WireGuardTransitionJournal(),
 ) {
     private val _state = MutableStateFlow<WireGuardTunnelState>(WireGuardTunnelState.Disconnected)
     val state: StateFlow<WireGuardTunnelState> = _state.asStateFlow()
     private var lifecycleJob: Job? = null
+
+    private val verifier = WireGuardHandshakeVerifier(
+        transport = transport,
+        onAttempt = { attempt -> transition(WireGuardTunnelState.Verifying(attempt)) }
+    )
 
     fun prepare(): Intent? = VpnService.prepare(context)
 
@@ -47,38 +52,27 @@ class WireGuardTunnelController(
     }
 
     private suspend fun verifyHandshake() {
-        val verificationStarted = System.currentTimeMillis()
-        repeat(20) { index ->
-            val attempt = index + 1
-            transition(WireGuardTunnelState.Verifying(attempt))
-            val handshake = transport.latestHandshakeEpochMillis()
-            val isFresh = handshake != null &&
-                handshake >= verificationStarted - HANDSHAKE_CLOCK_SKEW_MS &&
-                handshake <= System.currentTimeMillis() + HANDSHAKE_CLOCK_SKEW_MS
-            if (transport.isTunnelUp() && isFresh) {
-                transition(WireGuardTunnelState.Connected(handshake / 1000L))
+        when (val result = verifier.verify()) {
+            is WireGuardHandshakeVerification.Verified -> {
+                transition(WireGuardTunnelState.Connected(result.handshakeEpochMillis / 1000L))
                 monitorTunnelHealth()
-                return
             }
-            delay(HANDSHAKE_POLL_INTERVAL_MS)
+            is WireGuardHandshakeVerification.Failed -> failClosed(result.reason)
         }
-        failClosed("WireGuard peer handshake was not verified within 10 seconds")
     }
 
     private suspend fun monitorTunnelHealth() {
         while (true) {
             delay(HEALTH_POLL_INTERVAL_MS)
-            val handshake = transport.latestHandshakeEpochMillis()
-            val now = System.currentTimeMillis()
-            val healthy = transport.isTunnelUp() &&
-                handshake != null &&
-                handshake > 0L &&
-                now - handshake <= MAX_HANDSHAKE_AGE_MS
-            if (!healthy) {
+            if (!verifier.isHealthy()) {
                 failClosed("WireGuard transport or handshake became unhealthy; tunnel was stopped for safety")
                 return
             }
-            transition(WireGuardTunnelState.Connected(handshake!! / 1000L))
+            val handshake = transport.latestHandshakeEpochMillis() ?: run {
+                failClosed("WireGuard handshake evidence disappeared; tunnel was stopped for safety")
+                return
+            }
+            transition(WireGuardTunnelState.Connected(handshake / 1000L))
         }
     }
 
@@ -122,9 +116,6 @@ class WireGuardTunnelController(
     }
 
     companion object {
-        private const val HANDSHAKE_POLL_INTERVAL_MS = 500L
         private const val HEALTH_POLL_INTERVAL_MS = 5_000L
-        private const val MAX_HANDSHAKE_AGE_MS = 180_000L
-        private const val HANDSHAKE_CLOCK_SKEW_MS = 5_000L
     }
 }
