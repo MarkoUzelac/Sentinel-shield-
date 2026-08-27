@@ -7,11 +7,7 @@ enum class CapabilityId { VPN_TRANSPORT, VPN_HANDSHAKE, RADAR_TELEPHONY, CALL_MM
 
 data class EvidenceProvenance(val source: String, val collectedAtEpochMs: Long = System.currentTimeMillis(), val runtimeBacked: Boolean, val verificationRule: String)
 
-data class CapabilityEvidence(
-    val id: CapabilityId, val title: String, val status: CapabilityStatus, val source: String, val details: String,
-    val lastCheckedEpochMs: Long = System.currentTimeMillis(), val provenance: EvidenceProvenance? = null,
-    val expiresAtEpochMs: Long = lastCheckedEpochMs + DEFAULT_EVIDENCE_TTL_MS
-) {
+data class CapabilityEvidence(val id: CapabilityId, val title: String, val status: CapabilityStatus, val source: String, val details: String, val lastCheckedEpochMs: Long = System.currentTimeMillis(), val provenance: EvidenceProvenance? = null, val expiresAtEpochMs: Long = lastCheckedEpochMs + DEFAULT_EVIDENCE_TTL_MS) {
     fun effectiveStatus(nowEpochMs: Long): CapabilityStatus = when {
         status == CapabilityStatus.UNAVAILABLE -> CapabilityStatus.UNAVAILABLE
         nowEpochMs >= expiresAtEpochMs -> CapabilityStatus.UNVERIFIED
@@ -34,7 +30,7 @@ object CapabilityEvidenceEngine {
         else -> evidence(CapabilityId.VPN_TRANSPORT, "WireGuard transport", CapabilityStatus.UNAVAILABLE, "WireGuardProfileStore", "Nije učitan stvarni WireGuard profil.", "No provisioned profile")
     }
     fun vpnHandshake(connected: Boolean, handshakeVerified: Boolean, handshakeEpochMs: Long? = null) = when {
-        handshakeVerified && handshakeEpochMs != null -> evidence(CapabilityId.VPN_HANDSHAKE, "Handshake verification", CapabilityStatus.VERIFIED, "WireGuard peer statistics", "Peer handshake je potvrđen svježim runtime podatkom.", "Fresh post-start peer handshake")
+        handshakeVerified -> evidence(CapabilityId.VPN_HANDSHAKE, "Handshake verification", CapabilityStatus.VERIFIED, "WireGuard peer statistics", "Peer handshake je potvrđen svježim runtime podatkom${handshakeEpochMs?.let { " (epochMs=$it)" } ?: ""}.", "Fresh post-start peer handshake")
         connected -> evidence(CapabilityId.VPN_HANDSHAKE, "Handshake verification", CapabilityStatus.UNVERIFIED, "WireGuard peer statistics", "Tunel je aktivan, ali nema potvrđenog svježeg handshake dokaza.", "Connected without current handshake evidence")
         else -> evidence(CapabilityId.VPN_HANDSHAKE, "Handshake verification", CapabilityStatus.UNAVAILABLE, "WireGuard peer statistics", "Handshake se može verificirati tek nakon aktivnog tunela.", "Tunnel is inactive")
     }
