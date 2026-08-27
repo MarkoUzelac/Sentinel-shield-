@@ -36,9 +36,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -46,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.localization.stringRes
+import com.example.data.model.CapabilityEvidenceSnapshot
 import com.example.data.model.CapabilityId
 import com.example.data.model.CapabilityEvidence
 import com.example.ui.components.CapabilityEvidenceCard
@@ -74,6 +76,7 @@ fun DashboardScreen(
     val logs by viewModel.scanLogs.collectAsState()
     val securityScore by viewModel.securityScore.collectAsState()
     val evidence by viewModel.capabilityEvidence.collectAsState()
+    val evidenceSnapshot = remember(evidence) { CapabilityEvidenceSnapshot.from(evidence) }
 
     LazyColumn(
         modifier = modifier.fillMaxSize().background(skin.bgColor).padding(16.dp),
@@ -108,7 +111,7 @@ fun DashboardScreen(
             }
         }
         items(
-            evidence.filter {
+            evidenceSnapshot.items.filter {
                 it.id in setOf(
                     CapabilityId.VPN_TRANSPORT,
                     CapabilityId.VPN_HANDSHAKE,
@@ -150,24 +153,24 @@ fun DashboardScreen(
         item { Text("BRZI ALATI", color = skin.textMutedColor, fontSize = 11.sp, letterSpacing = 1.sp) }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                QuickActionButton(stringRes("tab_radar"), statusSubtitle(evidence, CapabilityId.RADAR_TELEPHONY), Icons.Default.Radar, skin.primaryColor, onNavigateToRadar, Modifier.weight(1f))
-                QuickActionButton(stringRes("tab_vpn"), statusSubtitle(evidence, CapabilityId.VPN_HANDSHAKE), Icons.Default.VpnKey, skin.primaryColor, onNavigateToVpn, Modifier.weight(1f))
+                QuickActionButton(stringRes("tab_radar"), evidenceSnapshot.statusOf(CapabilityId.RADAR_TELEPHONY).name, Icons.Default.Radar, skin.primaryColor, onNavigateToRadar, Modifier.weight(1f))
+                QuickActionButton(stringRes("tab_vpn"), evidenceSnapshot.statusOf(CapabilityId.VPN_HANDSHAKE).name, Icons.Default.VpnKey, skin.primaryColor, onNavigateToVpn, Modifier.weight(1f))
             }
         }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                QuickActionButton(stringRes("tab_call_sec"), statusSubtitle(evidence, CapabilityId.CALL_MMI), Icons.Default.Call, skin.primaryColor, onNavigateToCallSecurity, Modifier.weight(1f))
-                QuickActionButton(stringRes("tab_legal"), statusSubtitle(evidence, CapabilityId.LEGAL_GUIDANCE), Icons.Default.Gavel, skin.primaryColor, onNavigateToLegal, Modifier.weight(1f))
+                QuickActionButton(stringRes("tab_call_sec"), evidenceSnapshot.statusOf(CapabilityId.CALL_MMI).name, Icons.Default.Call, skin.primaryColor, onNavigateToCallSecurity, Modifier.weight(1f))
+                QuickActionButton(stringRes("tab_legal"), evidenceSnapshot.statusOf(CapabilityId.LEGAL_GUIDANCE).name, Icons.Default.Gavel, skin.primaryColor, onNavigateToLegal, Modifier.weight(1f))
             }
         }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                QuickActionButton("AI Threat", statusSubtitle(evidence, CapabilityId.AI_THREAT_ANALYSIS), Icons.Default.Psychology, skin.primaryColor, onNavigateToAiScanner, Modifier.weight(1f))
-                QuickActionButton("Dark Web", statusSubtitle(evidence, CapabilityId.DARK_WEB_LOOKUP), Icons.Default.Language, skin.primaryColor, onNavigateToDarkWeb, Modifier.weight(1f))
+                QuickActionButton("AI Threat", evidenceSnapshot.statusOf(CapabilityId.AI_THREAT_ANALYSIS).name, Icons.Default.Psychology, skin.primaryColor, onNavigateToAiScanner, Modifier.weight(1f))
+                QuickActionButton("Dark Web", evidenceSnapshot.statusOf(CapabilityId.DARK_WEB_LOOKUP).name, Icons.Default.Language, skin.primaryColor, onNavigateToDarkWeb, Modifier.weight(1f))
             }
         }
         item {
-            QuickActionButton("Network Audit", statusSubtitle(evidence, CapabilityId.NETWORK_AUDIT), Icons.Default.Security, skin.primaryColor, onNavigateToNetwork, Modifier.fillMaxWidth())
+            QuickActionButton("Network Audit", evidenceSnapshot.statusOf(CapabilityId.NETWORK_AUDIT).name, Icons.Default.Security, skin.primaryColor, onNavigateToNetwork, Modifier.fillMaxWidth())
         }
         if (logs.isNotEmpty()) {
             item { Text("SIGURNOSNI DNEVNIK", color = skin.textMutedColor, fontSize = 11.sp, letterSpacing = 1.sp) }
