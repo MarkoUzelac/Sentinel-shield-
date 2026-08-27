@@ -9,7 +9,6 @@ import android.bluetooth.le.ScanResult
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
-import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import com.example.data.model.DeviceLocationState
 import com.example.data.model.SignalKind
@@ -42,7 +41,8 @@ import android.telephony.TelephonyManager
 class SignalRadarProvider(
     private val context: Context,
     private val locationProvider: DeviceLocationProvider,
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default),
+    private val openCellIdProvider: OpenCellIdProvider = OpenCellIdProvider()
 ) {
     private val _snapshot = MutableStateFlow(SignalRadarSnapshot())
     val snapshot: StateFlow<SignalRadarSnapshot> = _snapshot.asStateFlow()
@@ -60,16 +60,15 @@ class SignalRadarProvider(
             val name = runCatching { result.device.name }.getOrNull().orEmpty().ifBlank { "BLE uređaj" }
             val stableId = stableHash(result.device.address)
             val distance = estimateDistanceMeters(rssi, result.txPower)
-            val label = "BLE-$stableId"
             bleDevices[stableId] = SignalRadarItem(
                 id = "ble_$stableId",
                 kind = SignalKind.BLE,
-                label = label,
+                label = "BLE-$stableId",
                 technology = if (name.contains("beacon", true)) "BLE beacon" else "Bluetooth LE",
                 rssiDbm = rssi,
                 estimatedDistanceMeters = distance,
                 risk = riskFromBle(rssi, name),
-                explanation = "Pasivno očitan BLE oglasa; identitet osobe/uređaja nije utvrđen.",
+                explanation = "Pasivno očitan BLE oglas; identitet osobe ili uređaja nije utvrđen.",
                 observedAtEpochMs = System.currentTimeMillis(),
                 runtimeBacked = true
             )
@@ -77,7 +76,11 @@ class SignalRadarProvider(
         }
 
         override fun onScanFailed(errorCode: Int) {
-            _snapshot.value = _snapshot.value.copy(scanning = false, error = "BLE scan nije uspio (kod $errorCode).", lastUpdatedEpochMs = System.currentTimeMillis())
+            _snapshot.value = _snapshot.value.copy(
+                scanning = false,
+                error = "BLE skeniranje nije uspjelo (kod $errorCode).",
+                lastUpdatedEpochMs = System.currentTimeMillis()
+            )
         }
     }
 
@@ -111,36 +114,52 @@ class SignalRadarProvider(
         runCatching { scanner?.startScan(bleCallback) }
     }
 
-    private fun refreshCellular() {
-        if (!hasLocationPermission() || telephonyManager == null) {
-            return
-        }
+    private suspend fun refreshCellular() {
+        if (!hasLocationPermission() || telephonyManager == null) return
         val records = runCatching { telephonyManager.allCellInfo.orEmpty() }.getOrDefault(emptyList())
-        val location = locationProvider.state.value
-        val cells = records.mapNotNull { toCellSignal(it, location) }
+        val deviceLocation = locationProvider.state.value
+        val cells = records.mapNotNull { toCellSignal(it, deviceLocation) }
+            .distinctBy { it.id }
+            .take(12)
+            .map { item ->
+                val tower = openCellIdProvider.lookup(
+                    mcc = item.mcc,
+                    mnc = item.mnc,
+                    areaCode = item.areaCode,
+                    cellId = item.cellId,
+                    radio = item.technology.toOpenCellIdRadio()
+                )
+                if (tower == null) item else item.copy(
+                    latitude = tower.latitude,
+                    longitude = tower.longitude,
+                    locationSource = tower.source,
+                    locationAccuracyMeters = tower.rangeMeters,
+                    explanation = "Stvarna ćelija očitana kroz TelephonyManager; lokacija tornja dohvaćena iz OpenCellID-a (${tower.samples} uzoraka)."
+                )
+            }
         _snapshot.value = _snapshot.value.copy(cellularCount = cells.size, signals = mergeSignals(cells))
     }
 
     private fun toCellSignal(info: CellInfo, location: DeviceLocationState): SignalRadarItem? {
         val registered = info.isRegistered
         val dbm = info.cellSignalStrength.dbm
-        val (technology, cellId, area) = when (info) {
+        val (technology, cellId, area, mcc, mnc) = when (info) {
             is CellInfoLte -> {
                 val id = info.cellIdentity as CellIdentityLte
-                Triple("4G LTE", id.ci.toLong(), id.tac)
+                Quad("4G LTE", id.ci.toLong(), id.tac, id.mccString?.toIntOrNull(), id.mncString?.toIntOrNull())
             }
             is CellInfoGsm -> {
                 val id = info.cellIdentity as CellIdentityGsm
-                Triple("2G GSM", id.cid.toLong(), id.lac)
+                Quad("2G GSM", id.cid.toLong(), id.lac, id.mccString?.toIntOrNull(), id.mncString?.toIntOrNull())
             }
             is CellInfoWcdma -> {
                 val id = info.cellIdentity as CellIdentityWcdma
-                Triple("3G WCDMA", id.cid.toLong(), id.lac)
+                Quad("3G WCDMA", id.cid.toLong(), id.lac, id.mccString?.toIntOrNull(), id.mncString?.toIntOrNull())
             }
             is CellInfoNr -> {
                 if (Build.VERSION.SDK_INT < 29) return null
                 val id = info.cellIdentity as CellIdentityNr
-                Triple("5G NR", id.nci, id.tac)
+                Quad("5G NR", id.nci, id.tac, id.mccString?.toIntOrNull(), id.mncString?.toIntOrNull())
             }
             else -> return null
         }
@@ -156,6 +175,8 @@ class SignalRadarProvider(
             signalLevel = info.cellSignalStrength.level,
             latitude = location.latitude,
             longitude = location.longitude,
+            mcc = mcc,
+            mnc = mnc,
             risk = risk,
             explanation = if (registered) "Stvarna registrirana ćelija očitana kroz TelephonyManager." else "Stvarna susjedna ćelija očitana kroz TelephonyManager.",
             runtimeBacked = true
@@ -164,7 +185,9 @@ class SignalRadarProvider(
 
     private fun mergeSignals(cells: List<SignalRadarItem>): List<SignalRadarItem> {
         val ble = bleDevices.values.toList()
-        return (cells + ble).sortedWith(compareByDescending<SignalRadarItem> { riskWeight(it.risk) }.thenByDescending { it.rssiDbm ?: -999 }).take(80)
+        return (cells + ble)
+            .sortedWith(compareByDescending<SignalRadarItem> { riskWeight(it.risk) }.thenByDescending { it.rssiDbm ?: -999 })
+            .take(80)
     }
 
     private fun pruneBle() {
@@ -224,4 +247,14 @@ class SignalRadarProvider(
         .digest(value.toByteArray())
         .take(6)
         .joinToString("") { "%02x".format(it) }
+
+    private fun String.toOpenCellIdRadio(): String = when {
+        contains("GSM", true) -> "GSM"
+        contains("WCDMA", true) -> "UMTS"
+        contains("LTE", true) -> "LTE"
+        contains("NR", true) -> "NR"
+        else -> ""
+    }
+
+    private data class Quad<A, B, C, D, E>(val first: A, val second: B, val third: C, val fourth: D, val fifth: E)
 }
