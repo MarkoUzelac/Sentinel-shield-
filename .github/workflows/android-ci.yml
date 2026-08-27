@@ -4,18 +4,20 @@ on:
   push:
     branches: ["main"]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: android-ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: android-ci-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: false
 
 jobs:
   build-and-test:
     name: Build / test / lint
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -32,22 +34,23 @@ jobs:
           gradle-version: '9.3.1'
 
       - name: Verify Gradle configuration
-        run: gradle tasks --all --stacktrace
+        run: ./gradlew tasks --all --stacktrace
 
       - name: Assemble release
         env:
           RELEASE_SIGNING_REQUIRED: 'false'
-        run: gradle assembleRelease --stacktrace
+        run: ./gradlew assembleRelease --stacktrace
 
       - name: Unit tests
-        run: gradle test --stacktrace
+        run: ./gradlew test --stacktrace
 
       - name: Android lint
-        run: gradle lint --stacktrace
+        run: ./gradlew lint --stacktrace
 
   dependency-security:
     name: Dependency and secret security
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -76,6 +79,7 @@ jobs:
     if: always()
     needs: [build-and-test, dependency-security]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Require all checks to pass
         run: |
