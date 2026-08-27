@@ -35,6 +35,8 @@ jobs:
         run: gradle tasks --all --stacktrace
 
       - name: Assemble release
+        env:
+          RELEASE_SIGNING_REQUIRED: 'false'
         run: gradle assembleRelease --stacktrace
 
       - name: Unit tests
