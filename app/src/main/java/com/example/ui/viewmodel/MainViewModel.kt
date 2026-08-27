@@ -2,7 +2,6 @@ package com.example.ui.viewmodel
 
 import android.app.Application
 import android.content.Intent
-import android.net.VpnService
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.SecurityRepository
@@ -14,9 +13,9 @@ import com.example.data.model.NetworkSpeedResult
 import com.example.data.model.ThreatItem
 import com.example.data.model.ThreatSeverity
 import com.example.data.model.VpnServer
+import com.example.vpn.UnprovisionedWireGuardTransport
 import com.example.vpn.WireGuardTunnelController
 import com.example.vpn.WireGuardTunnelState
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -26,7 +25,7 @@ import kotlinx.coroutines.launch
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: SecurityRepository
-    private val vpnController = WireGuardTunnelController(application)
+    private val vpnController = WireGuardTunnelController(application, UnprovisionedWireGuardTransport(application))
     val scanLogs: StateFlow<List<ScanLogEntity>>
 
     private val _isRealtimeShieldActive = MutableStateFlow(true)
@@ -37,27 +36,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val isPhishingProtectionActive: StateFlow<Boolean> = _isPhishingProtectionActive.asStateFlow()
     private val _securityScore = MutableStateFlow(94)
     val securityScore: StateFlow<Int> = _securityScore.asStateFlow()
+    private val _vpnServers = MutableStateFlow<List<VpnServer>>(emptyList())
+    val vpnServers: StateFlow<List<VpnServer>> = _vpnServers.asStateFlow()
+    private val _selectedVpnServer = MutableStateFlow<VpnServer?>(null)
+    val selectedVpnServer: StateFlow<VpnServer?> = _selectedVpnServer.asStateFlow()
+    val vpnState: StateFlow<WireGuardTunnelState> = vpnController.state
+    val isVpnConnected: StateFlow<Boolean> = vpnController.state
+        .stateIn(viewModelScope, SharingStarted.Eagerly, WireGuardTunnelState.Disconnected)
+        .let { state ->
+            MutableStateFlow(state.value is WireGuardTunnelState.Connected).also { connected ->
+                viewModelScope.launch { state.collect { connected.value = it is WireGuardTunnelState.Connected } }
+            }
+        }.asStateFlow()
+
     private val _isDeepScanning = MutableStateFlow(false)
     val isDeepScanning: StateFlow<Boolean> = _isDeepScanning.asStateFlow()
     private val _deepScanProgress = MutableStateFlow(0f)
     val deepScanProgress: StateFlow<Float> = _deepScanProgress.asStateFlow()
     private val _deepScanStep = MutableStateFlow("Initializing Sentinel Engine...")
     val deepScanStep: StateFlow<String> = _deepScanStep.asStateFlow()
-    private val _vpnServers = MutableStateFlow<List<VpnServer>>(emptyList())
-    val vpnServers: StateFlow<List<VpnServer>> = _vpnServers.asStateFlow()
-    private val _selectedVpnServer = MutableStateFlow<VpnServer?>(null)
-    val selectedVpnServer: StateFlow<VpnServer?> = _selectedVpnServer.asStateFlow()
-    val vpnState: StateFlow<WireGuardTunnelState> = vpnController.state
-    val isVpnConnected: StateFlow<Boolean> = vpnController.state.stateIn(
-        viewModelScope, SharingStarted.Eagerly, WireGuardTunnelState.Disconnected
-    ).let { state ->
-        MutableStateFlow(state.value is WireGuardTunnelState.Connected).also { connected ->
-            viewModelScope.launch {
-                state.collect { connected.value = it is WireGuardTunnelState.Connected }
-            }
-        }
-    }.asStateFlow()
-
     private val _isTestingSpeed = MutableStateFlow(false)
     val isTestingSpeed: StateFlow<Boolean> = _isTestingSpeed.asStateFlow()
     private val _speedTestResult = MutableStateFlow<NetworkSpeedResult?>(null)
@@ -113,12 +110,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return intent
     }
 
-    fun onVpnConsentGranted() {
-        vpnController.startService()
-    }
+    fun onVpnConsentGranted() = vpnController.startService()
 
-    fun markVpnTransportVerified() {
-        vpnController.markTransportVerified()
+    fun markVpnTransportVerified(handshakeEpochSeconds: Long) {
+        vpnController.markTransportVerified(handshakeEpochSeconds)
         updateSecurityScore()
     }
 
@@ -133,27 +128,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             when (vpnController.state.value) {
                 is WireGuardTunnelState.Connected -> vpnController.stop()
                 is WireGuardTunnelState.Starting,
+                is WireGuardTunnelState.Verifying,
                 is WireGuardTunnelState.AwaitingUserConsent -> Unit
                 else -> {
                     val consentIntent = prepareVpnConsent()
-                    if (consentIntent == null) {
-                        vpnController.startService()
-                    }
+                    if (consentIntent == null) vpnController.startService()
                 }
             }
             updateSecurityScore()
         }
     }
 
-    fun onVpnStateChanged(state: WireGuardTunnelState) {
-        if (state is WireGuardTunnelState.Connected) updateSecurityScore()
-    }
-
     fun startDeepSystemScan() {
         if (_isDeepScanning.value) return
         viewModelScope.launch {
             _isDeepScanning.value = true
-            _deepScanProgress.value = 0.05f
             val steps = listOf(
                 "Checking System Integrity & Root Sandbox..." to 0.2f,
                 "Auditing App Permissions & Sensitive APIs..." to 0.45f,
@@ -161,7 +150,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 "Evaluating SSL Certificates & Local Storage..." to 0.9f,
                 "Scan Completed!" to 1.0f
             )
-            for ((stepText, progress) in steps) { _deepScanStep.value = stepText; _deepScanProgress.value = progress; delay(700) }
+            for ((stepText, progress) in steps) { _deepScanStep.value = stepText; _deepScanProgress.value = progress; kotlinx.coroutines.delay(700) }
             _isDeepScanning.value = false
             _securityScore.value = 98
             repository.saveScanLog(ScanLogEntity("Full Deep System Audit", "DEEP_SCAN", "PASSED", 98, "Completed the local Sentinel audit workflow.", "Local heuristic scan completed; no claim of complete device-wide malware coverage."))
@@ -181,7 +170,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateAiTargetInput(input: String) { _aiTargetInput.value = input }
     fun updateAiCategory(category: String) { _aiScanCategory.value = category }
-
     fun runAiThreatAnalysis() {
         val input = _aiTargetInput.value.trim()
         if (input.isBlank()) return
