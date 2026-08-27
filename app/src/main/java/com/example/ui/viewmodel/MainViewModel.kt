@@ -211,8 +211,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun updateChatInput(input: String) { _chatMessages.value = _chatMessages.value + ("user_input" to input) }
     fun sendSentinelChatMessage(message: String) {
         if (message.isBlank() || _isChatThinking.value) return
-        viewModelScope.launch { _isChatThinking.value = true; try { _chatMessages.value = _chatMessages.value + ("user" to message); val response = repository.askSentinelAi(message); _chatMessages.value = _chatMessages.value + ("sentinel" to response) } finally { _isChatThinking.value = false } }
+        viewModelScope.launch { _isChatThinking.value = true; try { _chatMessages.value = _chatMessages.value + ("user" to message); val response = repository.getSentinelAiChatResponse(message, _chatMessages.value.takeLast(8).joinToString("\n") { it.first + ": " + it.second }); _chatMessages.value = _chatMessages.value + ("sentinel" to response) } finally { _isChatThinking.value = false } }
     }
+    fun updateDarkWebQuery(input: String) { _darkWebQuery.value = input.trim() }
     fun searchBreachData(query: String = _darkWebQuery.value) {
         _darkWebQuery.value = query
         viewModelScope.launch { _isSearchingBreaches.value = true; try { _breachResults.value = withContext(Dispatchers.IO) { repository.searchBreachData(_darkWebQuery.value) }; _hasSearchedBreaches.value = true } finally { _isSearchingBreaches.value = false; rebuildCapabilityEvidence() } }
