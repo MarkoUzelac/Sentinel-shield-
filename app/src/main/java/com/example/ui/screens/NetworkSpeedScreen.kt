@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
@@ -32,13 +33,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.Canvas
+import com.example.data.model.NetworkObservation
 import com.example.data.model.NetworkSpeedResult
 import com.example.ui.theme.CyberCyan
 import com.example.ui.theme.CyberGreen
@@ -58,86 +59,95 @@ fun NetworkSpeedScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) 
     val result by viewModel.speedTestResult.collectAsState()
     val observation by viewModel.networkObservation.collectAsState()
 
-    LazyColumnCompat(
+    LazyColumn(
         modifier = modifier.fillMaxSize().background(DarkBackground).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("NETWORK SECURITY & LATENCY AUDIT", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 1.sp)
-        Text(
-            "Stvarni HTTPS probe + runtime podaci iz ConnectivityManagera. Mjerenje dostupnosti nije dokaz potpune mrežne sigurnosti.",
-            fontSize = 13.sp,
-            color = TextSecondary
-        )
+        item {
+            Text("NETWORK SECURITY & LATENCY AUDIT", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 1.sp)
+            Spacer(Modifier.height(4.dp))
+            Text("Stvarni HTTPS probe + runtime podaci iz ConnectivityManagera. Mjerenje dostupnosti nije dokaz potpune mrežne sigurnosti.", fontSize = 13.sp, color = TextSecondary)
+        }
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = DarkCard),
-            border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(DarkCardBorder, CyberGreen.copy(alpha = 0.5f))))
-        ) {
-            Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(180.dp)) {
-                    Canvas(Modifier.size(170.dp)) {
-                        val strokeWidth = 14.dp.toPx()
-                        drawArc(DarkSurface, 135f, 270f, false, style = Stroke(strokeWidth, cap = StrokeCap.Round))
-                        val fraction = if (result != null) 0.35f else 0.1f
-                        drawArc(Brush.sweepGradient(listOf(CyberCyan, CyberGreen)), 135f, 270f * fraction, false, style = Stroke(strokeWidth, cap = StrokeCap.Round))
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = DarkCard),
+                border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(DarkCardBorder, CyberGreen.copy(alpha = 0.5f))))
+            ) {
+                Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(180.dp)) {
+                        Canvas(Modifier.size(170.dp)) {
+                            val strokeWidth = 14.dp.toPx()
+                            drawArc(DarkSurface, 135f, 270f, false, style = Stroke(strokeWidth, cap = StrokeCap.Round))
+                            val fraction = when {
+                                result == null -> 0.1f
+                                result!!.pingMs < 0 -> 0.05f
+                                else -> (1.0 - (result!!.pingMs / 1000.0)).toFloat().coerceIn(0.1f, 1f)
+                            }
+                            drawArc(Brush.sweepGradient(listOf(CyberCyan, CyberGreen)), 135f, 270f * fraction, false, style = Stroke(strokeWidth, cap = StrokeCap.Round))
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(result?.pingMs?.takeIf { it >= 0 }?.let { "%.0f".format(it) } ?: "—", fontSize = 36.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                            Text(if (result != null && result!!.pingMs >= 0) "HTTPS RTT ms" else "NO RESULT", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = if (result != null) CyberGreen else TextMuted, letterSpacing = 1.sp)
+                        }
                     }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(result?.pingMs?.let { "%.0f".format(it) } ?: "—", fontSize = 36.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        Text(if (result != null) "HTTPS RTT ms" else "NO RESULT", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = if (result != null) CyberGreen else TextMuted, letterSpacing = 1.sp)
-                    }
-                }
-                Spacer(Modifier.height(16.dp))
-                Button(
-                    onClick = viewModel::runSpeedAndSecurityAudit,
-                    enabled = !isTesting,
-                    colors = ButtonDefaults.buttonColors(containerColor = CyberGreen, contentColor = DarkBackground),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth().height(48.dp)
-                ) {
-                    if (isTesting) {
-                        CircularProgressIndicator(Modifier.size(20.dp), color = DarkBackground, strokeWidth = 2.dp)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Pokretanje probe…", fontWeight = FontWeight.Bold)
-                    } else {
-                        Icon(Icons.Default.Refresh, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Pokreni mrežni audit", fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(16.dp))
+                    Button(
+                        onClick = viewModel::runSpeedAndSecurityAudit,
+                        enabled = !isTesting,
+                        colors = ButtonDefaults.buttonColors(containerColor = CyberGreen, contentColor = DarkBackground),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        if (isTesting) {
+                            CircularProgressIndicator(Modifier.size(20.dp), color = DarkBackground, strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Pokretanje probe…", fontWeight = FontWeight.Bold)
+                        } else {
+                            Icon(Icons.Default.Refresh, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Pokreni mrežni audit", fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
         }
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            result?.let { res ->
-                NetworkMetricCard("HTTPS RTT", "%.0f ms".format(res.pingMs), "Stvarno mjerenje", CyberCyan, Modifier.weight(1f))
-                NetworkMetricCard("DNS", if (observation.dnsServers.isEmpty()) "—" else "${observation.dnsServers.size}", "DNS poslužitelji", CyberGreen, Modifier.weight(1f))
-            } ?: run {
-                NetworkMetricCard("Transport", observation.transports.ifEmpty { setOf("—") }.joinToString(), "Runtime", CyberCyan, Modifier.weight(1f))
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                NetworkMetricCard("Transport", observation.transports.ifEmpty { setOf("N/A") }.joinToString(), "Runtime", CyberCyan, Modifier.weight(1f))
                 NetworkMetricCard("VPN", if (observation.vpnTransport) "ACTIVE" else "NOT DETECTED", "Runtime", CyberGreen, Modifier.weight(1f))
             }
         }
 
-        Text("RUNTIME NETWORK EVIDENCE", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 1.sp)
-        NetworkEvidenceCard(observation = observation, result = result)
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                NetworkMetricCard("HTTPS RTT", result?.pingMs?.takeIf { it >= 0 }?.let { "%.0f ms".format(it) } ?: "—", "Stvarno mjerenje", CyberCyan, Modifier.weight(1f))
+                NetworkMetricCard("DNS", if (observation.dnsServers.isEmpty()) "N/A" else observation.dnsServers.size.toString(), "Poslužitelji", CyberGreen, Modifier.weight(1f))
+            }
+        }
+
+        item { Text("RUNTIME NETWORK EVIDENCE", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 1.sp) }
+        item { NetworkEvidenceCard(observation, result) }
     }
 }
 
 @Composable
-private fun NetworkMetricCard(title: String, value: String, subtitle: String, color: Color, modifier: Modifier = Modifier) {
-    Card(modifier, shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = DarkCard), border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DarkCardBorder))) {
+private fun NetworkMetricCard(title: String, value: String, subtitle: String, accent: Color, modifier: Modifier) {
+    Card(modifier = modifier, shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = DarkCard), border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DarkCardBorder))) {
         Column(Modifier.padding(14.dp)) {
             Text(title, fontSize = 10.sp, color = TextMuted)
             Spacer(Modifier.height(4.dp))
-            Text(value, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-            Text(subtitle, fontSize = 9.sp, color = color)
+            Text(value, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Text(subtitle, fontSize = 9.sp, color = accent)
         }
     }
 }
 
 @Composable
-private fun NetworkEvidenceCard(observation: com.example.data.model.NetworkObservation, result: NetworkSpeedResult?) {
+private fun NetworkEvidenceCard(observation: NetworkObservation, result: NetworkSpeedResult?) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -167,16 +177,3 @@ private fun EvidenceRow(icon: androidx.compose.ui.graphics.vector.ImageVector, l
         }
     }
 }
-
-@Composable
-private fun <T> LazyColumnCompat(
-    modifier: Modifier,
-    verticalArrangement: Arrangement.Vertical,
-    content: @Composable ColumnScopeCompat.() -> Unit
-) {
-    androidx.compose.foundation.lazy.LazyColumn(modifier = modifier, verticalArrangement = verticalArrangement) {
-        item(content = { content(ColumnScopeCompat()) })
-    }
-}
-
-private class ColumnScopeCompat
