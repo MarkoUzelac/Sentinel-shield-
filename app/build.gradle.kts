@@ -21,7 +21,12 @@ android {
     versionCode = 1
     versionName = "1.0"
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    buildConfigField("String", "OPEN_CELL_ID_API_KEY", "\"${providers.environmentVariable(\"OPEN_CELL_ID_API_KEY\").orNull.orEmpty()}\"")
+
+    val openCellIdApiKey =
+      providers.environmentVariable("OPEN_CELL_ID_API_KEY").orNull.orEmpty()
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
+    buildConfigField("String", "OPEN_CELL_ID_API_KEY", "\"$openCellIdApiKey\"")
   }
 
   signingConfigs {
@@ -124,7 +129,7 @@ dependencies {
   androidTestImplementation(libs.androidx.espresso.core)
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.runner)
-  debugImplementation(libs.androidx.compose.ui.test.manifest)
+  debugImplementation(libs.compose.ui.test.manifest)
   debugImplementation(libs.androidx.compose.ui.tooling)
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
