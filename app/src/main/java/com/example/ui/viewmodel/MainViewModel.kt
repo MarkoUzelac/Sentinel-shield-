@@ -48,6 +48,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val networkEvidenceProvider = connectivityManager?.let(::AndroidNetworkEvidenceProvider)
     private val evidenceClock: EvidenceClock = EvidenceClock.SYSTEM
     private val telephonyManager = application.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+
     val vpnState: StateFlow<WireGuardTunnelState> = vpnController.state
     private val _vpnConsentRequest = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
     val vpnConsentRequest: SharedFlow<Intent> = _vpnConsentRequest
@@ -148,9 +149,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val telephonyAvailable = telephonyManager != null && getApplication<Application>().packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)
         val cellCount = if (permissionGranted && telephonyAvailable) {
             runCatching { telephonyManager?.allCellInfo?.size ?: 0 }.getOrDefault(0)
-        } else {
-            0
-        }
+        } else 0
         return RadarObservation(permissionGranted, cellCount, telephonyAvailable)
     }
 
@@ -178,28 +177,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             CapabilityEvidenceEngine.callSecurity(_callSecurityObservation.value, evidenceClock),
             CapabilityEvidenceEngine.network(_networkObservation.value, evidenceClock),
             CapabilityEvidenceEngine.localSetting(
-                CapabilityId.PHISHING_PROTECTION,
-                "Phishing protection",
-                _isPhishingProtectionActive.value,
-                "Sentinel local protection setting",
-                "Lokalna phishing zaštita je uključena, ali aktivna učinkovitost nije neovisno verificirana.",
-                evidenceClock
+                CapabilityId.PHISHING_PROTECTION, "Phishing protection", _isPhishingProtectionActive.value,
+                "Sentinel local protection setting", "Lokalna phishing zaštita je uključena, ali aktivna učinkovitost nije neovisno verificirana.", evidenceClock
             ),
             CapabilityEvidenceEngine.localSetting(
-                CapabilityId.AD_TELEMETRY_FILTER,
-                "Ad/telemetry filter",
-                _isAdBlockActive.value,
-                "Sentinel local protection setting",
-                "Lokalni filter je uključen; njegova stvarna pokrivenost nije neovisno verificirana.",
-                evidenceClock
+                CapabilityId.AD_TELEMETRY_FILTER, "Ad/telemetry filter", _isAdBlockActive.value,
+                "Sentinel local protection setting", "Lokalni filter je uključen; njegova stvarna pokrivenost nije neovisno verificirana.", evidenceClock
             ),
             CapabilityEvidenceEngine.localSetting(
-                CapabilityId.REALTIME_SHIELD,
-                "Background shield",
-                _isRealtimeShieldActive.value,
-                "Sentinel local protection setting",
-                "Lokalni background shield je uključen; to samo po sebi nije dokaz potpune zaštite uređaja.",
-                evidenceClock
+                CapabilityId.REALTIME_SHIELD, "Background shield", _isRealtimeShieldActive.value,
+                "Sentinel local protection setting", "Lokalni background shield je uključen; to samo po sebi nije dokaz potpune zaštite uređaja.", evidenceClock
             ),
             CapabilityEvidence(
                 CapabilityId.AI_THREAT_ANALYSIS,
@@ -232,13 +219,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun updateSecurityScoreFromEvidence(evidence: List<CapabilityEvidence>) {
         if (evidence.isEmpty()) return
-        val weights = mapOf(
-            CapabilityStatus.VERIFIED to 1.0,
-            CapabilityStatus.UNVERIFIED to 0.55,
-            CapabilityStatus.UNAVAILABLE to 0.0
-        )
-        val score = evidence.map { weights.getValue(it.status) }.average() * 100.0
-        _securityScore.value = score.toInt().coerceIn(0, 100)
+        val weights = mapOf(CapabilityStatus.VERIFIED to 1.0, CapabilityStatus.UNVERIFIED to 0.55, CapabilityStatus.UNAVAILABLE to 0.0)
+        _securityScore.value = (evidence.map { weights.getValue(it.effectiveStatus(evidenceClock.nowEpochMillis())) }.average() * 100.0).toInt().coerceIn(0, 100)
     }
 
     fun toggleRealtimeShield(active: Boolean) { _isRealtimeShieldActive.value = active; rebuildCapabilityEvidence() }
@@ -328,7 +310,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
             for ((stepText, progress) in steps) { _deepScanStep.value = stepText; _deepScanProgress.value = progress; kotlinx.coroutines.delay(700) }
             _isDeepScanning.value = false
-            repository.saveScanLog(ScanLogEntity("Full Deep System Audit", "DEEP_SCAN", "PASSED", _securityScore.value, "Completed the local Sentinel audit workflow.", "Local heuristic scan completed; no claim of complete device-wide malware coverage."))
+            repository.saveScanLog(ScanLogEntity(title = "Full Deep System Audit", scanType = "DEEP_SCAN", status = "PASSED", score = _securityScore.value, summary = "Completed the local Sentinel audit workflow.", detailsJson = "Local heuristic scan completed; no claim of complete device-wide malware coverage."))
             rebuildCapabilityEvidence()
         }
     }
@@ -340,7 +322,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val result = repository.runNetworkSecurityAudit()
             _speedTestResult.value = result
             _isTestingSpeed.value = false
-            repository.saveScanLog(ScanLogEntity("Wi-Fi Security & Speed Audit", "NETWORK_AUDIT", "WARNING", 0, "Runtime network state and HTTPS probe are available; full security proof is not claimed.", "UNVERIFIED"))
+            repository.saveScanLog(ScanLogEntity(title = "Wi-Fi Security & Speed Audit", scanType = "NETWORK_AUDIT", status = "WARNING", score = 0, summary = "Runtime network state and HTTPS probe are available; full security proof is not claimed.", detailsJson = "UNVERIFIED"))
             rebuildCapabilityEvidence()
         }
     }
@@ -355,7 +337,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val threat = repository.analyzeSecurityThreatWithAi(input, _aiScanCategory.value)
             _lastThreatResult.value = threat
             _isAiScanning.value = false
-            repository.saveScanLog(ScanLogEntity("AI Threat Audit: ${threat.title}", "AI_THREAT", if (threat.severity == ThreatSeverity.SAFE) "PASSED" else "WARNING", 0, threat.description, threat.recommendation))
+            repository.saveScanLog(ScanLogEntity(title = "AI Threat Audit: ${threat.title}", scanType = "AI_THREAT", status = if (threat.severity == ThreatSeverity.SAFE) "PASSED" else "WARNING", score = 0, summary = threat.description, detailsJson = threat.recommendation))
             rebuildCapabilityEvidence()
         }
     }
@@ -371,23 +353,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun sendSentinelChatMessage(message: String) = sendChatMessage(message)
+
     fun updateDarkWebQuery(query: String) { _darkWebQuery.value = query }
     fun searchBreachData() {
         if (_isSearchingBreaches.value || _darkWebQuery.value.isBlank()) return
         viewModelScope.launch {
             _isSearchingBreaches.value = true
-            _breachResults.value = repository.searchBreachData(_darkWebQuery.value)
+            _breachResults.value = withContext(kotlinx.coroutines.Dispatchers.IO) { repository.searchBreachData(_darkWebQuery.value) }
             _hasSearchedBreaches.value = true
             _isSearchingBreaches.value = false
             rebuildCapabilityEvidence()
         }
     }
 
+    fun searchDarkWebBreaches() = searchBreachData()
+
     override fun onCleared() {
         networkEvidenceProvider?.stop()
         super.onCleared()
     }
-
-    fun clearAllLogs() = viewModelScope.launch { repository.clearLogs() }
-    fun deleteLog(id: Long) = viewModelScope.launch { repository.deleteLog(id) }
 }
