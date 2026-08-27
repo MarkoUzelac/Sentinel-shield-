@@ -82,13 +82,12 @@ fun DarkWebMonitorScreen(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Monitor stolen password dumps, identity leaks, and credentials sold on underground hacker markets.",
+                text = "Demo breach records only — no live dark-web feed is queried in this build.",
                 fontSize = 13.sp,
-                color = TextSecondary
+                color = CyberOrange
             )
         }
 
-        // Search Input Card
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -100,7 +99,7 @@ fun DarkWebMonitorScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "Scan Target Identity",
+                        text = "Test Identity",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary
@@ -109,7 +108,7 @@ fun DarkWebMonitorScreen(
                     OutlinedTextField(
                         value = query,
                         onValueChange = { viewModel.updateDarkWebQuery(it) },
-                        placeholder = { Text("Enter email address (e.g. user@domain.com)", color = TextMuted, fontSize = 13.sp) },
+                        placeholder = { Text("Enter email address", color = TextMuted, fontSize = 13.sp) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("input_darkweb_query"),
@@ -145,22 +144,21 @@ fun DarkWebMonitorScreen(
                                 strokeWidth = 2.dp
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Querying Breach Feeds...", fontWeight = FontWeight.Bold)
+                            Text("Running demo lookup...", fontWeight = FontWeight.Bold)
                         } else {
                             Icon(imageVector = Icons.Default.Search, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Check Dark Web Leaks", fontWeight = FontWeight.Bold)
+                            Text("Run Demo Breach Check", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             }
         }
 
-        // Search Results List
         if (hasSearched) {
             item {
                 Text(
-                    text = "BREACH SEARCH RESULTS (${breachResults.size})",
+                    text = "DEMO RESULTS (${breachResults.size})",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = TextMuted,
@@ -180,21 +178,21 @@ fun DarkWebMonitorScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Default.CheckCircle,
+                                imageVector = Icons.Default.Warning,
                                 contentDescription = null,
-                                tint = CyberGreen,
+                                tint = CyberOrange,
                                 modifier = Modifier.size(32.dp)
                             )
                             Spacer(modifier = Modifier.width(16.dp))
                             Column {
                                 Text(
-                                    text = "No Breaches Detected!",
+                                    text = "No live result available",
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = TextPrimary
                                 )
                                 Text(
-                                    text = "Your email identity was not found in active monitored dark web dumps.",
+                                    text = "This build does not query a verified breach service.",
                                     fontSize = 12.sp,
                                     color = TextSecondary
                                 )
@@ -228,14 +226,14 @@ fun BreachRecordCard(breach: BreachRecord) {
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
-                        .background(CyberRed.copy(alpha = 0.2f))
+                        .background(CyberOrange.copy(alpha = 0.2f))
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = "EXPOSED DATA",
+                        text = "DEMO / UNVERIFIED",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
-                        color = CyberRed
+                        color = CyberOrange
                     )
                 }
                 Spacer(modifier = Modifier.width(10.dp))
@@ -247,26 +245,21 @@ fun BreachRecordCard(breach: BreachRecord) {
             }
 
             Spacer(modifier = Modifier.height(10.dp))
-
             Text(
                 text = breach.domain,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary
             )
-
             Spacer(modifier = Modifier.height(4.dp))
-
             Text(
                 text = breach.description,
                 fontSize = 13.sp,
                 color = TextSecondary
             )
-
             Spacer(modifier = Modifier.height(12.dp))
-
             Text(
-                text = "Compromised Info: ${breach.compromisedFields.joinToString(", ")}",
+                text = "Data: ${breach.compromisedFields.joinToString(", ")}",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = CyberOrange
