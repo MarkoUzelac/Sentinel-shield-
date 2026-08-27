@@ -26,6 +26,7 @@ import com.example.data.model.CapabilityId
 import com.example.data.model.CapabilityStatus
 import com.example.data.model.DeviceLocationState
 import com.example.data.model.EvidenceClock
+import com.example.data.model.EvidenceState
 import com.example.data.model.JurisdictionInfo
 import com.example.data.model.NetworkObservation
 import com.example.data.model.NetworkSpeedResult
@@ -60,8 +61,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val evidenceClock: EvidenceClock = EvidenceClock.SYSTEM
     private val telephonyManager = application.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
     private val locationProvider = DeviceLocationProvider(application.applicationContext)
-    private val radarProvider = SignalRadarProvider(application.applicationContext, locationProvider)
-    private val intelligenceCoordinator = SignalIntelligenceCoordinator(SignalIntelligenceEngine(now = evidenceClock::nowEpochMillis))
+    private val radarProvider = SignalRadarProvider(application.applicationContext, locationProvider, evidenceClock = evidenceClock)
+    private val intelligenceCoordinator = SignalIntelligenceCoordinator(
+        SignalIntelligenceEngine(now = evidenceClock::nowEpochMillis)
+    )
 
     val vpnState: StateFlow<WireGuardTunnelState> = vpnController.state
     private val _vpnConsentRequest = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
@@ -136,14 +139,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _vpnServers.value = servers
         _selectedVpnServer.value = servers.firstOrNull()
         jurisdictions = repository.getJurisdictions()
-
         locationProvider.start()
         radarProvider.start()
 
         viewModelScope.launch {
             radarProvider.snapshot.collect { snapshot ->
-                intelligenceCoordinator.replaceSource(ObservationSource.BLE, snapshot.signals.filter { it.kind.name == "BLE" }.map(::toObservation))
-                intelligenceCoordinator.replaceSource(ObservationSource.CELLULAR, snapshot.signals.filter { it.kind.name == "CELLULAR" }.map(::toObservation))
+                val cells = snapshot.signals.filter { it.kind.name == "CELLULAR" }.map(::toObservation)
+                val ble = snapshot.signals.filter { it.kind.name == "BLE" }.map(::toObservation)
+                intelligenceCoordinator.replaceSource(ObservationSource.CELLULAR, cells)
+                intelligenceCoordinator.replaceSource(ObservationSource.BLE, ble)
+                snapshot.signals.filter { it.locationSource.equals("OpenCellID", ignoreCase = true) }
+                    .map(::toTowerObservation)
+                    .also { intelligenceCoordinator.replaceSource(ObservationSource.OPENCELLID, it) }
                 refreshEvidenceSources()
             }
         }
@@ -158,7 +165,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         latitude = state.latitude,
                         longitude = state.longitude,
                         accuracyMeters = state.accuracyMeters?.toDouble(),
-                        evidenceState = if (state.isFreshAt(evidenceClock.nowEpochMillis())) com.example.data.model.EvidenceState.VERIFIED else com.example.data.model.EvidenceState.UNVERIFIED,
+                        evidenceState = if (state.isFreshAt(evidenceClock.nowEpochMillis())) EvidenceState.VERIFIED else EvidenceState.UNVERIFIED,
                         details = "Device GPS/GNSS"
                     )))
                 }
@@ -166,7 +173,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         networkEvidenceProvider?.let { provider ->
             provider.start()
-            viewModelScope.launch { provider.observation.collect { observation -> _networkObservation.value = observation; rebuildCapabilityEvidence() } }
+            viewModelScope.launch {
+                provider.observation.collect { observation ->
+                    _networkObservation.value = observation
+                    intelligenceCoordinator.replaceSource(ObservationSource.NETWORK, listOf(
+                        SignalObservation(
+                            id = "network_state",
+                            source = ObservationSource.NETWORK,
+                            kind = ObservationKind.NETWORK_STATE,
+                            observedAtEpochMs = evidenceClock.nowEpochMillis(),
+                            evidenceState = if (observation.available) EvidenceState.VERIFIED else EvidenceState.UNAVAILABLE,
+                            details = "transports=${observation.transports.joinToString(",")};validated=${observation.validated};vpn=${observation.vpnTransport}"
+                        )
+                    ))
+                    rebuildCapabilityEvidence()
+                }
+            }
         }
         viewModelScope.launch {
             vpnController.state.collect { state ->
@@ -175,7 +197,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     source = ObservationSource.VPN,
                     kind = ObservationKind.VPN_STATE,
                     observedAtEpochMs = evidenceClock.nowEpochMillis(),
-                    evidenceState = if (state is WireGuardTunnelState.Connected) com.example.data.model.EvidenceState.VERIFIED else com.example.data.model.EvidenceState.UNVERIFIED,
+                    evidenceState = if (state is WireGuardTunnelState.Connected) EvidenceState.VERIFIED else EvidenceState.UNVERIFIED,
                     details = state.toString().lowercase()
                 )))
                 rebuildCapabilityEvidence()
@@ -199,9 +221,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         mcc = signal.mcc,
         mnc = signal.mnc,
         distanceMeters = signal.estimatedDistanceMeters,
-        evidenceState = if (signal.runtimeBacked) com.example.data.model.EvidenceState.VERIFIED else com.example.data.model.EvidenceState.UNVERIFIED,
-        details = signal.explanation
+        evidenceState = if (signal.runtimeBacked) EvidenceState.VERIFIED else EvidenceState.UNVERIFIED,
+        details = buildString {
+            append(signal.explanation)
+            append(";count=").append(signal.observationCount)
+            append(";firstSeen=").append(signal.firstObservedAtEpochMs)
+            append(";rssiMin=").append(signal.minRssiDbm)
+            append(";rssiMax=").append(signal.maxRssiDbm)
+            append(";trend=").append(signal.rssiTrendDbm)
+            append(";persistenceSec=").append(signal.persistenceSeconds)
+            append(";anomalyScore=").append(signal.anomalyScore)
+        }
     )
+
+    private fun toTowerObservation(signal: com.example.data.model.SignalRadarItem): SignalObservation =
+        toObservation(signal).copy(
+            source = ObservationSource.OPENCELLID,
+            kind = ObservationKind.CELL_LOCATION
+        )
 
     private fun readRadarObservation(): RadarObservation {
         val permissionGranted = ContextCompat.checkSelfPermission(getApplication<Application>(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
