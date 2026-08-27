@@ -13,7 +13,7 @@ import com.example.data.model.NetworkSpeedResult
 import com.example.data.model.ThreatItem
 import com.example.data.model.ThreatSeverity
 import com.example.data.model.VpnServer
-import com.example.vpn.UnprovisionedWireGuardTransport
+import com.example.vpn.WireGuardProfileStore
 import com.example.vpn.WireGuardTunnelController
 import com.example.vpn.WireGuardTunnelState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,7 +25,9 @@ import kotlinx.coroutines.launch
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: SecurityRepository
-    private val vpnController = WireGuardTunnelController(application, UnprovisionedWireGuardTransport(application))
+    private val wireGuardProfileStore = WireGuardProfileStore(application)
+    private val vpnController = WireGuardTunnelController(application)
+    private var pendingWireGuardConfig: com.wireguard.config.Config? = null
     val scanLogs: StateFlow<List<ScanLogEntity>>
 
     private val _isRealtimeShieldActive = MutableStateFlow(true)
@@ -41,6 +43,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedVpnServer = MutableStateFlow<VpnServer?>(null)
     val selectedVpnServer: StateFlow<VpnServer?> = _selectedVpnServer.asStateFlow()
     val vpnState: StateFlow<WireGuardTunnelState> = vpnController.state
+    val isVpnProvisioned: Boolean = wireGuardProfileStore.hasProfile()
     val isVpnConnected: StateFlow<Boolean> = vpnController.state
         .stateIn(viewModelScope, SharingStarted.Eagerly, WireGuardTunnelState.Disconnected)
         .let { state ->
@@ -110,11 +113,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return intent
     }
 
-    fun onVpnConsentGranted() = vpnController.startService()
+    private fun loadWireGuardProfile(): com.wireguard.config.Config? = runCatching {
+        wireGuardProfileStore.load()
+    }.onFailure {
+        vpnController.markError("WireGuard profile is not provisioned")
+    }.getOrNull()
 
-    fun markVpnTransportVerified(handshakeEpochSeconds: Long) {
-        vpnController.markTransportVerified(handshakeEpochSeconds)
-        updateSecurityScore()
+    fun onVpnConsentGranted() {
+        val config = pendingWireGuardConfig ?: loadWireGuardProfile() ?: return
+        pendingWireGuardConfig = null
+        vpnController.beginVerification(config)
     }
 
     fun selectVpnServer(server: VpnServer) {
@@ -131,8 +139,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 is WireGuardTunnelState.Verifying,
                 is WireGuardTunnelState.AwaitingUserConsent -> Unit
                 else -> {
+                    val config = loadWireGuardProfile() ?: return@launch
+                    pendingWireGuardConfig = config
                     val consentIntent = prepareVpnConsent()
-                    if (consentIntent == null) vpnController.startService()
+                    if (consentIntent == null) {
+                        pendingWireGuardConfig = null
+                        vpnController.beginVerification(config)
+                    }
                 }
             }
             updateSecurityScore()
