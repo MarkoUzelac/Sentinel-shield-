@@ -13,10 +13,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/** Coordinates Android VPN consent, the official WireGuard backend and handshake verification. */
+/** Coordinates Android VPN consent, the real WireGuard backend and fail-closed verification. */
 class WireGuardTunnelController(
     private val context: Context,
-    private val transport: WireGuardTransport = WireGuardTransport(context),
+    private val transport: WireGuardTransport = GoWireGuardTransport(context),
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main.immediate)
 ) {
     private val _state = MutableStateFlow<WireGuardTunnelState>(WireGuardTunnelState.Disconnected)
@@ -43,17 +43,22 @@ class WireGuardTunnelController(
     }
 
     private suspend fun verifyHandshake() {
-        for (attempt in 1..20) {
+        val verificationStarted = System.currentTimeMillis()
+        repeat(20) { index ->
+            val attempt = index + 1
             _state.value = WireGuardTunnelState.Verifying(attempt)
-            val handshake = transport.latestHandshakeEpochSeconds()
-            if (handshake != null && handshake > 0L) {
-                _state.value = WireGuardTunnelState.Connected(handshake)
+            val handshake = transport.latestHandshakeEpochMillis()
+            val isFresh = handshake != null &&
+                handshake >= verificationStarted - 1_000L &&
+                handshake <= System.currentTimeMillis() + 5_000L
+            if (isFresh) {
+                _state.value = WireGuardTunnelState.Connected(handshake / 1000L)
                 return
             }
             delay(500)
         }
         transport.stop()
-        _state.value = WireGuardTunnelState.Error("WireGuard peer handshake was not verified")
+        _state.value = WireGuardTunnelState.Error("WireGuard peer handshake was not verified within 10 seconds")
     }
 
     fun stop() {
