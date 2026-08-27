@@ -1,7 +1,6 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,7 +16,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
@@ -32,9 +30,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,19 +58,19 @@ fun DarkWebMonitorScreen(viewModel: MainViewModel, modifier: Modifier = Modifier
 
     LazyColumn(modifier = modifier.fillMaxSize().background(DarkBackground).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
-            Text("BREACH INTELLIGENCE", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 1.sp)
+            Text(text = "BREACH INTELLIGENCE", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 1.sp)
             Spacer(Modifier.height(4.dp))
-            Text("Provjera koristi stvarni HIBP provider kada je konfiguriran. Bez providera nema sintetičkih rezultata.", fontSize = 13.sp, color = CyberOrange)
+            Text(text = "Provjera koristi stvarni HIBP provider kada je konfiguriran. Bez providera nema sintetičkih rezultata.", fontSize = 13.sp, color = CyberOrange)
         }
         item {
             Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = DarkCard), border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DarkCardBorder))) {
                 Column(Modifier.padding(16.dp)) {
-                    Text("IDENTITY", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    Text(text = "IDENTITY", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
                         value = query,
                         onValueChange = viewModel::updateDarkWebQuery,
-                        placeholder = { Text("Enter email address", color = TextMuted, fontSize = 13.sp) },
+                        placeholder = { Text(text = "Enter email address", color = TextMuted, fontSize = 13.sp) },
                         modifier = Modifier.fillMaxWidth().testTag("input_darkweb_query"),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CyberCyan, unfocusedBorderColor = DarkCardBorder, focusedContainerColor = DarkSurface, unfocusedContainerColor = DarkSurface, focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary),
@@ -86,18 +81,18 @@ fun DarkWebMonitorScreen(viewModel: MainViewModel, modifier: Modifier = Modifier
                         if (isSearching) {
                             CircularProgressIndicator(Modifier.size(20.dp), color = DarkBackground, strokeWidth = 2.dp)
                             Spacer(Modifier.width(8.dp))
-                            Text("Provjera u tijeku…", fontWeight = FontWeight.Bold)
+                            Text(text = "Provjera u tijeku…", fontWeight = FontWeight.Bold)
                         } else {
                             Icon(Icons.Default.Search, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
-                            Text("Provjeri breach podatke", fontWeight = FontWeight.Bold)
+                            Text(text = "Provjeri breach podatke", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             }
         }
         if (hasSearched) {
-            item { Text("RESULTS (${breachResults.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 1.sp) }
+            item { Text(text = "RESULTS (${breachResults.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 1.sp) }
             if (breachResults.isEmpty()) {
                 item {
                     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = DarkCard)) {
@@ -105,8 +100,8 @@ fun DarkWebMonitorScreen(viewModel: MainViewModel, modifier: Modifier = Modifier
                             Icon(Icons.Default.Warning, null, tint = CyberOrange, modifier = Modifier.size(32.dp))
                             Spacer(Modifier.width(16.dp))
                             Column {
-                                Text("Nema breach zapisa", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                                Text("Provider nije vratio zapis ili nije konfiguriran. Rezultat se ne interpretira kao dokaz potpune sigurnosti.", fontSize = 12.sp, color = TextSecondary)
+                                Text(text = "Nema breach zapisa", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                Text(text = "Provider nije vratio zapis ili nije konfiguriran. Rezultat se ne interpretira kao dokaz potpune sigurnosti.", fontSize = 12.sp, color = TextSecondary)
                             }
                         }
                     }
@@ -123,16 +118,16 @@ fun BreachRecordCard(breach: BreachRecord) {
     Card(modifier = Modifier.fillMaxWidth().testTag("breach_card_${breach.id}"), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = DarkCard), border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(CyberOrange.copy(alpha = .5f)))) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.clip(RoundedCornerShape(6.dp)).background(CyberOrange.copy(alpha = .2f)).padding(horizontal = 8.dp, vertical = 4.dp)) { Text("HIBP / UNVERIFIED", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberOrange) }
+                Box(Modifier.clip(RoundedCornerShape(6.dp)).background(CyberOrange.copy(alpha = .2f)).padding(horizontal = 8.dp, vertical = 4.dp)) { Text(text = "HIBP / UNVERIFIED", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberOrange) }
                 Spacer(Modifier.width(10.dp))
-                Text(breach.breachDate, fontSize = 11.sp, color = TextMuted)
+                Text(text = breach.breachDate, fontSize = 11.sp, color = TextMuted)
             }
             Spacer(Modifier.height(10.dp))
-            Text(breach.domain, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Text(text = breach.domain, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
             Spacer(Modifier.height(4.dp))
-            Text(breach.description, fontSize = 13.sp, color = TextSecondary)
+            Text(text = breach.description, fontSize = 13.sp, color = TextSecondary)
             Spacer(Modifier.height(12.dp))
-            Text("Data: ${breach.compromisedFields.joinToString(", ")}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = CyberOrange)
+            Text(text = "Data: ${breach.compromisedFields.joinToString(", ")}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = CyberOrange)
         }
     }
 }
