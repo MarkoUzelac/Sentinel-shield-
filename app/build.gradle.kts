@@ -6,8 +6,6 @@ plugins {
   alias(libs.plugins.secrets)
 }
 
-// Firebase/Google Services configuration is environment-specific and must not be fabricated.
-// The Google Services plugin is applied only when a real google-services.json is present.
 if (file("google-services.json").isFile) {
   apply(plugin = "com.google.gms.google-services")
 }
@@ -23,6 +21,7 @@ android {
     versionCode = 1
     versionName = "1.0"
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    buildConfigField("String", "OPEN_CELL_ID_API_KEY", "\"${providers.environmentVariable(\"OPEN_CELL_ID_API_KEY\").orNull.orEmpty()}\"")
   }
 
   signingConfigs {
@@ -99,6 +98,7 @@ dependencies {
   implementation(libs.androidx.lifecycle.runtime.compose)
   implementation(libs.androidx.lifecycle.runtime.ktx)
   implementation(libs.androidx.lifecycle.viewmodel.compose)
+  implementation(libs.androidx.navigation.compose)
   implementation(libs.androidx.room.ktx)
   implementation(libs.androidx.room.runtime)
   implementation(libs.converter.moshi)
