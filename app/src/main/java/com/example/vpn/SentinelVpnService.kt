@@ -2,14 +2,16 @@ package com.example.vpn
 
 import android.content.Intent
 import android.net.VpnService
+import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.util.Log
 
 /**
- * Platform VPN lifecycle boundary.
+ * Android VPN lifecycle boundary.
  *
- * This service deliberately does not claim a production WireGuard connection by itself.
- * A real WireGuard backend must be injected/started by the transport layer and only then
- * should the state machine transition to Connected.
+ * This service creates the platform TUN interface but does not claim a WireGuard tunnel is live.
+ * A real WireGuard transport must provide a successful handshake/health check before the UI can
+ * expose a verified CONNECTED state.
  */
 class SentinelVpnService : VpnService() {
     private var tunnelInterface: ParcelFileDescriptor? = null
@@ -17,25 +19,37 @@ class SentinelVpnService : VpnService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> stopTunnel()
-            ACTION_START -> startTunnel(intent)
+            ACTION_START -> startTunnel()
         }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
-    private fun startTunnel(intent: Intent) {
+    private fun startTunnel() {
         if (tunnelInterface != null) return
 
-        val builder = Builder()
-            .setSession("Sentinel Shield")
-            .setBlocking(true)
-            .addAddress("10.77.0.2", 32)
-            .addRoute("0.0.0.0", 0)
-            .addDnsServer("1.1.1.1")
+        try {
+            val builder = Builder()
+                .setSession("Sentinel Shield")
+                .setBlocking(true)
+                .addAddress("10.77.0.2", 32)
+                .addRoute("0.0.0.0", 0)
+                .addDnsServer("1.1.1.1")
 
-        tunnelInterface = builder.establish()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                builder.setMetered(false)
+            }
 
-        // The TUN interface existing is not sufficient proof of a functioning WireGuard peer.
-        // The repository/UI must remain disconnected until a real transport handshake is verified.
+            tunnelInterface = builder.establish()
+            if (tunnelInterface == null) {
+                Log.w(TAG, "VPN interface could not be established")
+                stopSelf()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "VPN interface startup failed", e)
+            tunnelInterface?.close()
+            tunnelInterface = null
+            stopSelf()
+        }
     }
 
     private fun stopTunnel() {
@@ -53,5 +67,6 @@ class SentinelVpnService : VpnService() {
     companion object {
         const val ACTION_START = "com.example.sentinelshield.vpn.START"
         const val ACTION_STOP = "com.example.sentinelshield.vpn.STOP"
+        private const val TAG = "SentinelVpnService"
     }
 }
