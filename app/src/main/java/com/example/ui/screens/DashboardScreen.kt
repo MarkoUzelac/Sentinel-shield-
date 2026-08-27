@@ -56,18 +56,7 @@ import com.example.ui.theme.LocalAppSkin
 import com.example.ui.viewmodel.MainViewModel
 
 @Composable
-fun DashboardScreen(
-    viewModel: MainViewModel,
-    onNavigateToAiScanner: () -> Unit,
-    onNavigateToRadar: () -> Unit = {},
-    onNavigateToVpn: () -> Unit = {},
-    onNavigateToCallSecurity: () -> Unit = {},
-    onNavigateToLegal: () -> Unit = {},
-    onNavigateToDarkWeb: () -> Unit = {},
-    onNavigateToNetwork: () -> Unit = {},
-    onNavigateToReport: () -> Unit = {},
-    modifier: Modifier = Modifier
-) {
+fun DashboardScreen(viewModel: MainViewModel, onNavigateToAiScanner: () -> Unit, onNavigateToRadar: () -> Unit = {}, onNavigateToVpn: () -> Unit = {}, onNavigateToCallSecurity: () -> Unit = {}, onNavigateToLegal: () -> Unit = {}, onNavigateToDarkWeb: () -> Unit = {}, onNavigateToNetwork: () -> Unit = {}, onNavigateToReport: () -> Unit = {}, modifier: Modifier = Modifier) {
     val skin = LocalAppSkin.current
     val isScanning by viewModel.isDeepScanning.collectAsState()
     val scanProgress by viewModel.deepScanProgress.collectAsState()
@@ -98,23 +87,13 @@ fun DashboardScreen(
                 }
             }
         }
-        items(evidenceSnapshot.items.filter { it.id in setOf(CapabilityId.VPN_TRANSPORT, CapabilityId.VPN_HANDSHAKE, CapabilityId.RADAR_TELEPHONY, CapabilityId.CALL_MMI, CapabilityId.PHISHING_PROTECTION, CapabilityId.AD_TELEMETRY_FILTER, CapabilityId.REALTIME_SHIELD) }, key = { it.id.name }) { evidenceItem ->
-            CapabilityEvidenceCard(evidence = evidenceItem)
-        }
+        items(evidenceSnapshot.items.filter { it.id in setOf(CapabilityId.VPN_TRANSPORT, CapabilityId.VPN_HANDSHAKE, CapabilityId.RADAR_TELEPHONY, CapabilityId.CALL_MMI, CapabilityId.PHISHING_PROTECTION, CapabilityId.AD_TELEMETRY_FILTER, CapabilityId.REALTIME_SHIELD) }, key = { it.id.name }) { evidenceItem -> CapabilityEvidenceCard(evidence = evidenceItem) }
         item {
             Button(onClick = { viewModel.startDeepSystemScan() }, enabled = !isScanning, modifier = Modifier.fillMaxWidth().testTag("btn_complete_audit"), colors = ButtonDefaults.buttonColors(containerColor = skin.primaryColor, contentColor = Color.Black), shape = RoundedCornerShape(14.dp)) {
-                Icon(Icons.Default.Security, null)
-                Spacer(Modifier.width(8.dp))
-                Text(if (isScanning) "SKENIRANJE U TIJEKU…" else "POKRENI POTPUNI SIGURNOSNI AUDIT", fontWeight = FontWeight.Bold)
+                Icon(Icons.Default.Security, null); Spacer(Modifier.width(8.dp)); Text(if (isScanning) "SKENIRANJE U TIJEKU…" else "POKRENI POTPUNI SIGURNOSNI AUDIT", fontWeight = FontWeight.Bold)
             }
         }
-        if (isScanning) {
-            item {
-                Card(colors = CardDefaults.cardColors(containerColor = skin.cardColor), shape = RoundedCornerShape(14.dp)) {
-                    Column(Modifier.padding(14.dp)) { Text(scanStep, color = skin.textSecondaryColor, fontSize = 11.sp); Spacer(Modifier.height(8.dp)); LinearProgressIndicator(progress = { scanProgress }, modifier = Modifier.fillMaxWidth(), color = skin.primaryColor) }
-                }
-            }
-        }
+        if (isScanning) item { Card(colors = CardDefaults.cardColors(containerColor = skin.cardColor), shape = RoundedCornerShape(14.dp)) { Column(Modifier.padding(14.dp)) { Text(scanStep, color = skin.textSecondaryColor, fontSize = 11.sp); Spacer(Modifier.height(8.dp)); LinearProgressIndicator(progress = { scanProgress }, modifier = Modifier.fillMaxWidth(), color = skin.primaryColor) } } }
         item { Text("BRZI ALATI", color = skin.textMutedColor, fontSize = 11.sp, letterSpacing = 1.sp) }
         item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { QuickActionButton(stringRes("tab_radar"), evidenceSnapshot.statusOf(CapabilityId.RADAR_TELEPHONY).name, Icons.Default.Radar, skin.primaryColor, onNavigateToRadar, Modifier.weight(1f)); QuickActionButton(stringRes("tab_vpn"), evidenceSnapshot.statusOf(CapabilityId.VPN_HANDSHAKE).name, Icons.Default.VpnKey, skin.primaryColor, onNavigateToVpn, Modifier.weight(1f)) } }
         item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { QuickActionButton(stringRes("tab_call_sec"), evidenceSnapshot.statusOf(CapabilityId.CALL_MMI).name, Icons.Default.Call, skin.primaryColor, onNavigateToCallSecurity, Modifier.weight(1f)); QuickActionButton(stringRes("tab_legal"), evidenceSnapshot.statusOf(CapabilityId.LEGAL_GUIDANCE).name, Icons.Default.Gavel, skin.primaryColor, onNavigateToLegal, Modifier.weight(1f)) } }
