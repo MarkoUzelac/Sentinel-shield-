@@ -27,8 +27,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Gavel
-import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Star
@@ -170,9 +168,9 @@ fun SentinelShieldApp(viewModel: MainViewModel, onImportWireGuardProfile: () -> 
                             onNavigateToDarkWeb = { secondary = SecondaryScreen.DARK_WEB },
                             onNavigateToNetwork = { secondary = SecondaryScreen.NETWORK }
                         )
-                        1 -> ImsiRadarScreen()
+                        1 -> ImsiRadarScreen(viewModel)
                         2 -> VpnManagerScreen(viewModel, onImportWireGuardProfile)
-                        3 -> CallSecurityScreen()
+                        3 -> CallSecurityScreen(viewModel)
                         4 -> LegalProtectionScreen()
                         5 -> SettingsScreen()
                     }
