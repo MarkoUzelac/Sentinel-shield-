@@ -16,28 +16,47 @@ class AndroidNetworkEvidenceProvider(
     private val _observation = MutableStateFlow(NetworkObservation())
     val observation: StateFlow<NetworkObservation> = _observation.asStateFlow()
 
+    private data class NetworkSnapshot(
+        var capabilities: NetworkCapabilities? = null,
+        var linkProperties: LinkProperties? = null,
+        var blocked: Boolean = false
+    )
+
+    private val snapshots = mutableMapOf<Network, NetworkSnapshot>()
+    private var activeDefaultNetwork: Network? = null
     private var started = false
 
     private val callback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
-            publish(network, null, null)
+            synchronized(snapshots) { snapshots.getOrPut(network) { NetworkSnapshot() } }
+            recomputeDefaultNetwork(network)
         }
 
         override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
-            publish(network, capabilities, null)
+            synchronized(snapshots) {
+                snapshots.getOrPut(network) { NetworkSnapshot() }.capabilities = capabilities
+            }
+            recomputeDefaultNetwork(network)
         }
 
         override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) {
-            publish(network, null, linkProperties)
+            synchronized(snapshots) {
+                snapshots.getOrPut(network) { NetworkSnapshot() }.linkProperties = linkProperties
+            }
+            recomputeDefaultNetwork(network)
         }
 
         override fun onBlockedStatusChanged(network: Network, blocked: Boolean) {
-            val current = _observation.value
-            _observation.value = current.copy(blocked = blocked)
+            synchronized(snapshots) {
+                snapshots.getOrPut(network) { NetworkSnapshot() }.blocked = blocked
+            }
+            if (network == activeDefaultNetwork) publish(network)
         }
 
         override fun onLost(network: Network) {
-            if (_observation.value.available) {
+            synchronized(snapshots) { snapshots.remove(network) }
+            if (network == activeDefaultNetwork) {
+                activeDefaultNetwork = null
                 _observation.value = NetworkObservation()
             }
         }
@@ -54,21 +73,22 @@ class AndroidNetworkEvidenceProvider(
     fun stop() {
         if (!started) return
         runCatching { connectivityManager.unregisterNetworkCallback(callback) }
+        synchronized(snapshots) { snapshots.clear() }
+        activeDefaultNetwork = null
         started = false
         _observation.value = NetworkObservation()
     }
 
-    private fun publish(
-        network: Network,
-        capabilitiesOverride: NetworkCapabilities?,
-        linkPropertiesOverride: LinkProperties?
-    ) {
-        val capabilities = capabilitiesOverride ?: runCatching {
-            connectivityManager.getNetworkCapabilities(network)
-        }.getOrNull() ?: return
-        val linkProperties = linkPropertiesOverride ?: runCatching {
-            connectivityManager.getLinkProperties(network)
-        }.getOrNull()
+    private fun recomputeDefaultNetwork(candidate: Network) {
+        // registerDefaultNetworkCallback delivers events only for the current default network.
+        activeDefaultNetwork = candidate
+        publish(candidate)
+    }
+
+    private fun publish(network: Network) {
+        val snapshot = synchronized(snapshots) { snapshots[network] } ?: return
+        val capabilities = snapshot.capabilities ?: return
+        val linkProperties = snapshot.linkProperties
 
         val transports = buildSet {
             if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) add("WIFI")
@@ -88,7 +108,7 @@ class AndroidNetworkEvidenceProvider(
             vpnTransport = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN),
             dnsServers = dnsServers,
             interfaceName = linkProperties?.interfaceName,
-            blocked = _observation.value.blocked
+            blocked = snapshot.blocked
         )
     }
 }
