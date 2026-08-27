@@ -1,13 +1,14 @@
 package com.example.vpn
 
 /**
- * Observable VPN lifecycle state. CONNECTED must only be emitted after the transport
- * implementation has started successfully and the platform reports an established tunnel.
+ * Observable VPN lifecycle state.
+ * CONNECTED is reserved for a verified WireGuard transport handshake.
  */
 sealed interface WireGuardTunnelState {
     data object Disconnected : WireGuardTunnelState
     data object AwaitingUserConsent : WireGuardTunnelState
     data object Starting : WireGuardTunnelState
-    data object Connected : WireGuardTunnelState
+    data class Verifying(val attempt: Int) : WireGuardTunnelState
+    data class Connected(val latestHandshakeEpochSeconds: Long) : WireGuardTunnelState
     data class Error(val message: String) : WireGuardTunnelState
 }
