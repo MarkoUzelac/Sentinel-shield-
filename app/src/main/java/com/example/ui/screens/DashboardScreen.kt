@@ -39,7 +39,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -67,7 +66,7 @@ fun DashboardScreen(viewModel: MainViewModel, onNavigateToAiScanner: () -> Unit,
     val evidenceSnapshot = remember(evidence) { CapabilityEvidenceSnapshot.from(evidence) }
 
     LazyColumn(modifier = modifier.fillMaxSize().background(skin.bgColor).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(44.dp).clip(CircleShape).background(skin.primaryColor.copy(alpha = .15f)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Security, null, tint = skin.primaryColor) }; Spacer(Modifier.width(10.dp)); Column(Modifier.weight(1f)) { Text(text = "SENTINEL SHIELD PRO", color = skin.textPrimaryColor, fontSize = 19.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp); Text(text = "JEDINSTVENI MODEL DOKAZA", color = skin.textMutedColor, fontSize = 10.sp, letterSpacing = 1.sp) } } }
+        item { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(44.dp).then(Modifier).clip(CircleShape).background(skin.primaryColor.copy(alpha = .15f)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Security, null, tint = skin.primaryColor) }; Spacer(Modifier.width(10.dp)); Column(Modifier.weight(1f)) { Text(text = "SENTINEL SHIELD PRO", color = skin.textPrimaryColor, fontSize = 19.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp); Text(text = "JEDINSTVENI MODEL DOKAZA", color = skin.textMutedColor, fontSize = 10.sp, letterSpacing = 1.sp) } } }
         item { ShieldGaugeCard(score = securityScore, isScanning = isScanning, modifier = Modifier.fillMaxWidth()) }
         item { Card(colors = CardDefaults.cardColors(containerColor = skin.cardColor), border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(skin.borderColor, skin.primaryColor))), shape = RoundedCornerShape(16.dp)) { Column(Modifier.padding(16.dp)) { Text(text = "CAPABILITY / EVIDENCE STATUS", color = skin.textPrimaryColor, fontSize = 12.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.height(8.dp)); Text(text = "VERIFIED = konkretan runtime dokaz · UNVERIFIED = postoji podatak, ali nije dovoljan za sigurnosni zaključak · UNAVAILABLE = izvor trenutno nije dostupan.", color = skin.textMutedColor, fontSize = 9.sp) } } }
         items(evidenceSnapshot.items.filter { it.id in setOf(CapabilityId.VPN_TRANSPORT, CapabilityId.VPN_HANDSHAKE, CapabilityId.RADAR_TELEPHONY, CapabilityId.CALL_MMI, CapabilityId.PHISHING_PROTECTION, CapabilityId.AD_TELEMETRY_FILTER, CapabilityId.REALTIME_SHIELD) }, key = { it.id.name }) { evidenceItem -> CapabilityEvidenceCard(evidence = evidenceItem) }
