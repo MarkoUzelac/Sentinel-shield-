@@ -22,7 +22,6 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 class SecurityRepository(private val scanLogDao: ScanLogDao) {
-
     val allLogs: Flow<List<ScanLogEntity>> = scanLogDao.getAllLogs()
 
     private val okHttpClient = OkHttpClient.Builder()
@@ -30,233 +29,140 @@ class SecurityRepository(private val scanLogDao: ScanLogDao) {
         .readTimeout(20, TimeUnit.SECONDS)
         .build()
 
-    suspend fun saveScanLog(log: ScanLogEntity) {
-        scanLogDao.insertLog(log)
-    }
+    suspend fun saveScanLog(log: ScanLogEntity) = scanLogDao.insertLog(log)
+    suspend fun clearLogs() = scanLogDao.clearAllLogs()
+    suspend fun deleteLog(id: Long) = scanLogDao.deleteLogById(id)
 
-    suspend fun clearLogs() {
-        scanLogDao.clearAllLogs()
-    }
+    /** Metadata catalog only. No entry below is asserted to be a live production VPN endpoint. */
+    fun getVpnServers(): List<VpnServer> = listOf(
+        VpnServer("ch_01", "Switzerland", "Zurich", "🇨🇭", 0, 0, "", "WireGuard", 51820, false),
+        VpnServer("is_01", "Iceland", "Reykjavik", "🇮🇸", 0, 0, "", "WireGuard", 51820, false),
+        VpnServer("de_01", "Germany", "Frankfurt", "🇩🇪", 0, 0, "", "WireGuard", 51820, false),
+        VpnServer("jp_01", "Japan", "Tokyo", "🇯🇵", 0, 0, "", "WireGuard", 51820, true),
+        VpnServer("us_01", "United States", "New York", "🇺🇸", 0, 0, "", "WireGuard", 51820, false),
+        VpnServer("sg_01", "Singapore", "Singapore", "🇸🇬", 0, 0, "", "WireGuard", 51820, true),
+        VpnServer("se_01", "Sweden", "Stockholm", "🇸🇪", 0, 0, "", "WireGuard", 51820, true)
+    )
 
-    suspend fun deleteLog(id: Long) {
-        scanLogDao.deleteLogById(id)
-    }
+    fun getJurisdictions(): List<JurisdictionInfo> = listOf(
+        JurisdictionInfo("Switzerland", "Privacy Haven (Non-Eyes)", 98, "FADP / Federal Act", true, "Privacy-focused jurisdiction."),
+        JurisdictionInfo("Iceland", "Privacy Haven (Non-Eyes)", 95, "Strong privacy framework", true, "Strong data protection framework."),
+        JurisdictionInfo("Germany", "14-Eyes Alliance", 78, "GDPR / BDSG", true, "EU data protection framework applies."),
+        JurisdictionInfo("United States", "5-Eyes Alliance (Founding)", 45, "CLOUD Act / FISA", false, "US surveillance and disclosure laws may apply."),
+        JurisdictionInfo("United Kingdom", "5-Eyes Alliance", 52, "Investigatory Powers Act", true, "Broad lawful-access framework.")
+    )
 
-    /**
-     * Server catalog shown in the UI. These are metadata-only nodes until a verified
-     * production tunnel configuration is supplied. Do not treat these addresses as live
-     * VPN endpoints or as evidence that a WireGuard/OpenVPN server is reachable.
-     */
-    fun getVpnServers(): List<VpnServer> {
-        return listOf(
-            VpnServer("ch_01", "Switzerland", "Zurich", "🇨🇭", 18, 22, "185.220.101.5", "WireGuard Pro", isPremium = false),
-            VpnServer("is_01", "Iceland", "Reykjavik", "🇮🇸", 24, 19, "185.220.102.8", "WireGuard Pro", isPremium = false),
-            VpnServer("de_01", "Germany", "Frankfurt", "🇩🇪", 14, 45, "185.220.103.12", "WireGuard Pro", isPremium = false),
-            VpnServer("jp_01", "Japan", "Tokyo", "🇯🇵", 120, 38, "185.220.104.99", "OpenVPN Stealth", isPremium = true),
-            VpnServer("us_01", "United States", "New York", "🇺🇸", 85, 62, "198.51.100.42", "WireGuard Pro", isPremium = false),
-            VpnServer("sg_01", "Singapore", "Singapore", "🇸🇬", 140, 31, "185.220.105.77", "OpenVPN Stealth", isPremium = true),
-            VpnServer("se_01", "Sweden", "Stockholm", "🇸🇪", 29, 28, "185.220.106.3", "WireGuard Pro", isPremium = true)
-        )
-    }
-
-    fun getJurisdictions(): List<JurisdictionInfo> {
-        return listOf(
-            JurisdictionInfo("Switzerland", "Privacy Haven (Non-Eyes)", 98, "Strict User Consent Required (FADP / Federal Act)", true, "Top privacy jurisdiction worldwide. Outside EU, 14-Eyes, and US subpoenas."),
-            JurisdictionInfo("Iceland", "Privacy Haven (Non-Eyes)", 95, "Strong Freedom of Information & Whistleblower Protection", true, "Extremely strong data privacy framework with independent renewable energy data centers."),
-            JurisdictionInfo("Germany", "14-Eyes Alliance", 78, "GDPR Enforced, Telecommunications Data Retention Struck Down", true, "Strict local data protection (BDSG/GDPR), though part of European intelligence sharing."),
-            JurisdictionInfo("United States", "5-Eyes Alliance (Founding)", 45, "CLOUD Act, FISA 702 Warrantless Surveillance", false, "Primary 5-Eyes leader. Tech providers subject to National Security Letters and secret gag orders."),
-            JurisdictionInfo("United Kingdom", "5-Eyes Alliance", 52, "Investigatory Powers Act ('Snooper\\'s Charter')", true, "Extensive ISP logging and legal encryption backdoor mandates under government review.")
-        )
-    }
-
-    private fun getGeminiApiKey(): String {
-        return try {
-            val field = BuildConfig::class.java.getField("GEMINI_API_KEY")
-            (field.get(null) as? String) ?: ""
-        } catch (_: Exception) {
-            ""
-        }
-    }
+    private fun getGeminiApiKey(): String = runCatching {
+        BuildConfig::class.java.getField("GEMINI_API_KEY").get(null) as? String ?: ""
+    }.getOrDefault("")
 
     suspend fun analyzeSecurityThreatWithAi(inputContent: String, scanCategory: String): ThreatItem = withContext(Dispatchers.IO) {
         val apiKey = getGeminiApiKey()
-
         if (apiKey.isNotBlank() && apiKey != "MY_GEMINI_API_KEY") {
             try {
                 val prompt = """
-                    You are Sentinel Shield Pro AI Security Engine. Analyze the following target input for cyber threats, phishing attempts, malware signatures, or privacy risks.
-                    Input: "$inputContent"
-                    Category: $scanCategory
-
-                    Respond strictly in valid JSON format:
-                    {
-                      "title": "Short Threat Title",
-                      "category": "$scanCategory",
-                      "severity": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "SAFE",
-                      "description": "Detailed technical analysis summary",
-                      "recommendation": "Step-by-step action to secure user data"
-                    }
+                    Analyze the target for cyber threats, phishing or privacy risks.
+                    Target: "$inputContent"
+                    Category: "$scanCategory"
+                    Return strict JSON with title, severity, description and recommendation.
                 """.trimIndent()
-
-                val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey"
-                val jsonPayload = JSONObject().apply {
-                    put("contents", JSONArray().apply {
-                        put(JSONObject().apply {
-                            put("parts", JSONArray().apply {
-                                put(JSONObject().put("text", prompt))
-                            })
-                        })
-                    })
+                val payload = JSONObject().apply {
+                    put("contents", JSONArray().put(JSONObject().put("parts", JSONArray().put(JSONObject().put("text", prompt)))))
                 }
-
                 val request = Request.Builder()
-                    .url(url)
-                    .post(jsonPayload.toString().toRequestBody("application/json".toMediaType()))
+                    .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey")
+                    .post(payload.toString().toRequestBody("application/json".toMediaType()))
                     .build()
-
                 okHttpClient.newCall(request).execute().use { response ->
-                    val responseBody = response.body?.string()
-                    if (response.isSuccessful && responseBody != null) {
-                        val rootObj = JSONObject(responseBody)
-                        val candidates = rootObj.optJSONArray("candidates")
-                        if (candidates != null && candidates.length() > 0) {
-                            val parts = candidates.getJSONObject(0)
-                                .optJSONObject("content")
-                                ?.optJSONArray("parts")
-                            if (parts != null && parts.length() > 0) {
-                                val text = parts.getJSONObject(0).optString("text", "")
-                                val jsonStart = text.indexOf("{")
-                                val jsonEnd = text.lastIndexOf("}")
-                                if (jsonStart != -1 && jsonEnd > jsonStart) {
-                                    val parsed = JSONObject(text.substring(jsonStart, jsonEnd + 1))
-                                    val severity = when (parsed.optString("severity", "MEDIUM").uppercase()) {
-                                        "CRITICAL" -> ThreatSeverity.CRITICAL
-                                        "HIGH" -> ThreatSeverity.HIGH
-                                        "MEDIUM" -> ThreatSeverity.MEDIUM
-                                        "LOW" -> ThreatSeverity.LOW
-                                        else -> ThreatSeverity.SAFE
-                                    }
-                                    return@withContext ThreatItem(
-                                        id = "ai_${System.currentTimeMillis()}",
-                                        title = parsed.optString("title", "AI Threat Audit"),
-                                        category = scanCategory,
-                                        severity = severity,
-                                        description = parsed.optString("description", "Analyzed target input for security anomalies."),
-                                        recommendation = parsed.optString("recommendation", "Maintain software updates and enable 2FA.")
-                                    )
-                                }
+                    val body = response.body?.string()
+                    if (response.isSuccessful && body != null) {
+                        val parts = JSONObject(body).optJSONArray("candidates")
+                            ?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
+                        val text = parts?.optJSONObject(0)?.optString("text", "") ?: ""
+                        val start = text.indexOf('{')
+                        val end = text.lastIndexOf('}')
+                        if (start >= 0 && end > start) {
+                            val parsed = JSONObject(text.substring(start, end + 1))
+                            val severity = when (parsed.optString("severity", "MEDIUM").uppercase()) {
+                                "CRITICAL" -> ThreatSeverity.CRITICAL
+                                "HIGH" -> ThreatSeverity.HIGH
+                                "MEDIUM" -> ThreatSeverity.MEDIUM
+                                "LOW" -> ThreatSeverity.LOW
+                                else -> ThreatSeverity.SAFE
                             }
+                            return@withContext ThreatItem(
+                                id = "ai_${System.currentTimeMillis()}",
+                                title = parsed.optString("title", "AI Threat Audit"),
+                                category = scanCategory,
+                                severity = severity,
+                                description = parsed.optString("description", "Analysis completed."),
+                                recommendation = parsed.optString("recommendation", "Review the target and apply least-privilege security controls.")
+                            )
                         }
                     }
                 }
             } catch (_: Exception) {
-                // Fall back to local heuristic analysis.
+                // Continue with local heuristic fallback.
             }
         }
 
-        val lowercaseInput = inputContent.lowercase()
-        val (severity, title, desc, rec) = when {
-            lowercaseInput.contains("http://") || (lowercaseInput.contains("login") && lowercaseInput.contains("verify")) || lowercaseInput.contains("bit.ly") ->
-                Quad(ThreatSeverity.HIGH, "Suspicious URL / Phishing Risk", "Target uses an unencrypted protocol or suspicious URL patterns.", "Avoid entering passwords or payment information. Prefer verified HTTPS domains.")
-            lowercaseInput.contains("apk") || lowercaseInput.contains("download") || lowercaseInput.contains("mod") ->
-                Quad(ThreatSeverity.CRITICAL, "Untrusted Sideload Application", "Input suggests installation from a third-party package source.", "Do not grant install-from-unknown-sources access unless you explicitly trust the source.")
-            lowercaseInput.contains("password") || lowercaseInput.contains("123456") || lowercaseInput.contains("admin") ->
-                Quad(ThreatSeverity.MEDIUM, "Weak Credentials Signature", "Input contains a weak or commonly targeted credential pattern.", "Use a unique long password and enable phishing-resistant MFA where possible.")
-            lowercaseInput.contains("camera") || lowercaseInput.contains("microphone") || lowercaseInput.contains("location") ->
-                Quad(ThreatSeverity.LOW, "Privacy Sensitive Permission Request", "Input references sensitive hardware or location access.", "Review Android permissions and revoke access not required for the feature.")
+        val lower = inputContent.lowercase()
+        val quad = when {
+            "http://" in lower || ("login" in lower && "verify" in lower) || "bit.ly" in lower ->
+                Quad(ThreatSeverity.HIGH, "Suspicious URL / Phishing Risk", "The input matches common phishing indicators.", "Do not submit credentials or payment information.")
+            "apk" in lower || "download" in lower || "mod" in lower ->
+                Quad(ThreatSeverity.CRITICAL, "Untrusted Sideload Application", "The input suggests installation from a third-party package source.", "Install apps only from trusted sources and verify signatures.")
+            "password" in lower || "123456" in lower || "admin" in lower ->
+                Quad(ThreatSeverity.MEDIUM, "Weak Credential Pattern", "The input contains a commonly targeted credential pattern.", "Use a unique long password and phishing-resistant MFA.")
+            "camera" in lower || "microphone" in lower || "location" in lower ->
+                Quad(ThreatSeverity.LOW, "Privacy-Sensitive Permission", "The input references sensitive device permissions.", "Review whether the permission is required and minimize access.")
             else ->
-                Quad(ThreatSeverity.SAFE, "No Local Malicious Signature Detected", "No matching local heuristic signature was found.", "A clean heuristic result is not proof that a target is completely safe.")
+                Quad(ThreatSeverity.SAFE, "No Local Signature Matched", "No known local heuristic signature matched this input.", "A clean heuristic result is not proof of safety.")
         }
-
-        ThreatItem(
-            id = "ai_${System.currentTimeMillis()}",
-            title = title,
-            category = scanCategory,
-            severity = severity,
-            description = desc,
-            recommendation = rec
-        )
+        ThreatItem("ai_${System.currentTimeMillis()}", quad.first, scanCategory, quad.first, quad.third, quad.fourth)
     }
 
     suspend fun getSentinelAiChatResponse(userMessage: String, historyContext: String): String = withContext(Dispatchers.IO) {
         val apiKey = getGeminiApiKey()
         if (apiKey.isNotBlank() && apiKey != "MY_GEMINI_API_KEY") {
             try {
-                val prompt = """
-                    You are Sentinel AI, the expert cybersecurity and digital privacy advisor embedded in Sentinel Shield Pro Android app.
-                    Provide clear, professional, concise, and empowering security advice.
-                    User Question: "$userMessage"
-                    Conversation context: "$historyContext"
-                """.trimIndent()
-
-                val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey"
-                val jsonPayload = JSONObject().apply {
-                    put("contents", JSONArray().apply {
-                        put(JSONObject().apply {
-                            put("parts", JSONArray().apply { put(JSONObject().put("text", prompt)) })
-                        })
-                    })
+                val prompt = "You are a cybersecurity advisor. User: $userMessage Context: $historyContext"
+                val payload = JSONObject().apply {
+                    put("contents", JSONArray().put(JSONObject().put("parts", JSONArray().put(JSONObject().put("text", prompt)))))
                 }
-
                 val request = Request.Builder()
-                    .url(url)
-                    .post(jsonPayload.toString().toRequestBody("application/json".toMediaType()))
+                    .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey")
+                    .post(payload.toString().toRequestBody("application/json".toMediaType()))
                     .build()
-
                 okHttpClient.newCall(request).execute().use { response ->
-                    val responseBody = response.body?.string()
-                    if (response.isSuccessful && responseBody != null) {
-                        val candidates = JSONObject(responseBody).optJSONArray("candidates")
-                        val parts = candidates?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
-                        if (parts != null && parts.length() > 0) {
-                            return@withContext parts.getJSONObject(0).optString("text", "Sentinel Shield AI recommendation active.")
-                        }
-                    }
+                    val body = response.body?.string()
+                    val parts = body?.let { JSONObject(it).optJSONArray("candidates")?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts") }
+                    val text = parts?.optJSONObject(0)?.optString("text")
+                    if (!text.isNullOrBlank()) return@withContext text
                 }
-            } catch (_: Exception) {
-                // Fall back to offline advice below.
-            }
+            } catch (_: Exception) { }
         }
-
         val lower = userMessage.lowercase()
         return@withContext when {
-            lower.contains("vpn") -> "A VPN can protect traffic from local network observers, but only a verified encrypted tunnel endpoint should be considered active protection."
-            lower.contains("phishing") || lower.contains("link") -> "Do not follow suspicious links requesting urgent verification. Check the domain independently and avoid submitting credentials to untrusted pages."
-            lower.contains("password") -> "Use a unique long password and a password manager. Prefer passkeys or phishing-resistant MFA for important accounts."
-            lower.contains("dark web") || lower.contains("leak") -> "A breach result must come from a verified breach-data source. If exposure is confirmed, rotate affected credentials and enable MFA."
-            else -> "Sentinel Guard recommends keeping Android updated, minimizing permissions, using HTTPS, and treating simulated security results as diagnostics rather than proof."
+            "vpn" in lower -> "A VPN protects traffic only when a real, verified encrypted tunnel is established."
+            "phishing" in lower || "link" in lower -> "Do not submit credentials through suspicious links; independently verify the domain."
+            "password" in lower -> "Use unique long passwords and phishing-resistant MFA."
+            "dark web" in lower || "leak" in lower -> "Treat breach results as verified only when sourced from a trusted breach-data provider."
+            else -> "Keep Android updated, minimize permissions and treat simulated diagnostics as non-verifying.
+"
         }
     }
 
-    /** Deterministic demo data retained for UI development; not a live network measurement. */
+    /** Demo diagnostic fixture; intentionally not presented as a live network measurement. */
     suspend fun runNetworkSecurityAudit(): NetworkSpeedResult = withContext(Dispatchers.IO) {
-        delay(1200)
-        NetworkSpeedResult(
-            pingMs = 16.4,
-            downloadMbps = 184.5,
-            uploadMbps = 42.8,
-            jitterMs = 2.1,
-            wifiSsid = "DEMO_NETWORK",
-            securityEncryption = "WPA3-Personal (SIMULATED)",
-            isDnsSecure = true,
-            publicIp = "UNVERIFIED"
-        )
+        delay(300)
+        NetworkSpeedResult(0.0, 0.0, 0.0, 0.0, "UNVERIFIED_NETWORK", "UNVERIFIED", false, "UNVERIFIED")
     }
 
-    /** Deterministic demo records retained for UI development; not a live dark-web query. */
-    fun checkDarkWebBreaches(query: String): List<BreachRecord> {
-        if (query.trim().isBlank()) return emptyList()
-        return listOf(
-            BreachRecord(
-                id = "demo_01",
-                domain = "DEMO_RECORD — NOT VERIFIED",
-                breachDate = "N/A",
-                compromisedFields = listOf("Demo Data"),
-                riskLevel = "UNVERIFIED",
-                description = "This result is synthetic test data. No live dark-web or breach feed was queried."
-            )
-        )
-    }
+    /** Demo-only records; no live breach feed is queried. */
+    fun checkDarkWebBreaches(query: String): List<BreachRecord> = if (query.trim().isBlank()) emptyList() else listOf(
+        BreachRecord("demo_01", "DEMO_RECORD", "N/A", listOf("Demo Data"), "UNVERIFIED", "Synthetic test data only; no live breach source was queried.")
+    )
 
     fun searchBreachData(query: String): List<BreachRecord> = checkDarkWebBreaches(query)
 
