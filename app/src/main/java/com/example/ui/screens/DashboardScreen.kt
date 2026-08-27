@@ -77,15 +77,10 @@ fun DashboardScreen(
     val evidence by viewModel.capabilityEvidence.collectAsState()
     val evidenceSnapshot = remember(evidence) { CapabilityEvidenceSnapshot.from(evidence) }
 
-    LazyColumn(
-        modifier = modifier.fillMaxSize().background(skin.bgColor).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
+    LazyColumn(modifier = modifier.fillMaxSize().background(skin.bgColor).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(44.dp).clip(CircleShape).background(skin.primaryColor.copy(alpha = .15f)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Security, null, tint = skin.primaryColor)
-                }
+                Box(Modifier.size(44.dp).clip(CircleShape).background(skin.primaryColor.copy(alpha = .15f)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Security, null, tint = skin.primaryColor) }
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text("SENTINEL SHIELD PRO", color = skin.textPrimaryColor, fontSize = 19.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
@@ -95,11 +90,7 @@ fun DashboardScreen(
         }
         item { ShieldGaugeCard(score = securityScore, isScanning = isScanning, modifier = Modifier.fillMaxWidth()) }
         item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = skin.cardColor),
-                border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(skin.borderColor, skin.primaryColor))),
-                shape = RoundedCornerShape(16.dp)
-            ) {
+            Card(colors = CardDefaults.cardColors(containerColor = skin.cardColor), border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(skin.borderColor, skin.primaryColor))), shape = RoundedCornerShape(16.dp)) {
                 Column(Modifier.padding(16.dp)) {
                     Text("CAPABILITY / EVIDENCE STATUS", color = skin.textPrimaryColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(8.dp))
@@ -107,28 +98,11 @@ fun DashboardScreen(
                 }
             }
         }
-        items(
-            evidenceSnapshot.items.filter {
-                it.id in setOf(
-                    CapabilityId.VPN_TRANSPORT,
-                    CapabilityId.VPN_HANDSHAKE,
-                    CapabilityId.RADAR_TELEPHONY,
-                    CapabilityId.CALL_MMI,
-                    CapabilityId.PHISHING_PROTECTION,
-                    CapabilityId.AD_TELEMETRY_FILTER,
-                    CapabilityId.REALTIME_SHIELD
-                )
-            },
-            key = { it.id.name }
-        ) { evidenceItem -> CapabilityEvidenceCard(evidenceItem) }
+        items(evidenceSnapshot.items.filter { it.id in setOf(CapabilityId.VPN_TRANSPORT, CapabilityId.VPN_HANDSHAKE, CapabilityId.RADAR_TELEPHONY, CapabilityId.CALL_MMI, CapabilityId.PHISHING_PROTECTION, CapabilityId.AD_TELEMETRY_FILTER, CapabilityId.REALTIME_SHIELD) }, key = { it.id.name }) { evidenceItem ->
+            CapabilityEvidenceCard(evidence = evidenceItem)
+        }
         item {
-            Button(
-                onClick = { viewModel.startDeepSystemScan() },
-                enabled = !isScanning,
-                modifier = Modifier.fillMaxWidth().testTag("btn_complete_audit"),
-                colors = ButtonDefaults.buttonColors(containerColor = skin.primaryColor, contentColor = Color.Black),
-                shape = RoundedCornerShape(14.dp)
-            ) {
+            Button(onClick = { viewModel.startDeepSystemScan() }, enabled = !isScanning, modifier = Modifier.fillMaxWidth().testTag("btn_complete_audit"), colors = ButtonDefaults.buttonColors(containerColor = skin.primaryColor, contentColor = Color.Black), shape = RoundedCornerShape(14.dp)) {
                 Icon(Icons.Default.Security, null)
                 Spacer(Modifier.width(8.dp))
                 Text(if (isScanning) "SKENIRANJE U TIJEKU…" else "POKRENI POTPUNI SIGURNOSNI AUDIT", fontWeight = FontWeight.Bold)
@@ -137,45 +111,22 @@ fun DashboardScreen(
         if (isScanning) {
             item {
                 Card(colors = CardDefaults.cardColors(containerColor = skin.cardColor), shape = RoundedCornerShape(14.dp)) {
-                    Column(Modifier.padding(14.dp)) {
-                        Text(scanStep, color = skin.textSecondaryColor, fontSize = 11.sp)
-                        Spacer(Modifier.height(8.dp))
-                        LinearProgressIndicator(progress = { scanProgress }, modifier = Modifier.fillMaxWidth(), color = skin.primaryColor)
-                    }
+                    Column(Modifier.padding(14.dp)) { Text(scanStep, color = skin.textSecondaryColor, fontSize = 11.sp); Spacer(Modifier.height(8.dp)); LinearProgressIndicator(progress = { scanProgress }, modifier = Modifier.fillMaxWidth(), color = skin.primaryColor) }
                 }
             }
         }
         item { Text("BRZI ALATI", color = skin.textMutedColor, fontSize = 11.sp, letterSpacing = 1.sp) }
-        item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                QuickActionButton(stringRes("tab_radar"), evidenceSnapshot.statusOf(CapabilityId.RADAR_TELEPHONY).name, Icons.Default.Radar, skin.primaryColor, onNavigateToRadar, Modifier.weight(1f))
-                QuickActionButton(stringRes("tab_vpn"), evidenceSnapshot.statusOf(CapabilityId.VPN_HANDSHAKE).name, Icons.Default.VpnKey, skin.primaryColor, onNavigateToVpn, Modifier.weight(1f))
-            }
-        }
-        item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                QuickActionButton(stringRes("tab_call_sec"), evidenceSnapshot.statusOf(CapabilityId.CALL_MMI).name, Icons.Default.Call, skin.primaryColor, onNavigateToCallSecurity, Modifier.weight(1f))
-                QuickActionButton(stringRes("tab_legal"), evidenceSnapshot.statusOf(CapabilityId.LEGAL_GUIDANCE).name, Icons.Default.Gavel, skin.primaryColor, onNavigateToLegal, Modifier.weight(1f))
-            }
-        }
-        item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                QuickActionButton("AI Threat", evidenceSnapshot.statusOf(CapabilityId.AI_THREAT_ANALYSIS).name, Icons.Default.Psychology, skin.primaryColor, onNavigateToAiScanner, Modifier.weight(1f))
-                QuickActionButton("Dark Web", evidenceSnapshot.statusOf(CapabilityId.DARK_WEB_LOOKUP).name, Icons.Default.Language, skin.primaryColor, onNavigateToDarkWeb, Modifier.weight(1f))
-            }
-        }
+        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { QuickActionButton(stringRes("tab_radar"), evidenceSnapshot.statusOf(CapabilityId.RADAR_TELEPHONY).name, Icons.Default.Radar, skin.primaryColor, onNavigateToRadar, Modifier.weight(1f)); QuickActionButton(stringRes("tab_vpn"), evidenceSnapshot.statusOf(CapabilityId.VPN_HANDSHAKE).name, Icons.Default.VpnKey, skin.primaryColor, onNavigateToVpn, Modifier.weight(1f)) } }
+        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { QuickActionButton(stringRes("tab_call_sec"), evidenceSnapshot.statusOf(CapabilityId.CALL_MMI).name, Icons.Default.Call, skin.primaryColor, onNavigateToCallSecurity, Modifier.weight(1f)); QuickActionButton(stringRes("tab_legal"), evidenceSnapshot.statusOf(CapabilityId.LEGAL_GUIDANCE).name, Icons.Default.Gavel, skin.primaryColor, onNavigateToLegal, Modifier.weight(1f)) } }
+        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { QuickActionButton("AI Threat", evidenceSnapshot.statusOf(CapabilityId.AI_THREAT_ANALYSIS).name, Icons.Default.Psychology, skin.primaryColor, onNavigateToAiScanner, Modifier.weight(1f)); QuickActionButton("Dark Web", evidenceSnapshot.statusOf(CapabilityId.DARK_WEB_LOOKUP).name, Icons.Default.Language, skin.primaryColor, onNavigateToDarkWeb, Modifier.weight(1f)) } }
         item { QuickActionButton("Network Audit", evidenceSnapshot.statusOf(CapabilityId.NETWORK_AUDIT).name, Icons.Default.Security, skin.primaryColor, onNavigateToNetwork, Modifier.fillMaxWidth()) }
         if (logs.isNotEmpty()) {
             item { Text("SIGURNOSNI DNEVNIK", color = skin.textMutedColor, fontSize = 11.sp, letterSpacing = 1.sp) }
             items(logs.takeLast(5).asReversed(), key = { it.id }) { log ->
                 Card(colors = CardDefaults.cardColors(containerColor = skin.cardColor), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(8.dp).clip(CircleShape).background(if (log.status == "ALERT") Color(0xFFFF1744) else skin.primaryColor))
-                        Spacer(Modifier.width(10.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(log.title, color = skin.textPrimaryColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            Text(log.summary, color = skin.textSecondaryColor, fontSize = 10.sp)
-                        }
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(if (log.status == "ALERT") Color(0xFFFF1744) else skin.primaryColor)); Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) { Text(log.title, color = skin.textPrimaryColor, fontSize = 12.sp, fontWeight = FontWeight.Bold); Text(log.summary, color = skin.textSecondaryColor, fontSize = 10.sp) }
                         IconButton(onClick = { viewModel.deleteLog(log.id) }) { Icon(Icons.Default.Delete, null, tint = skin.textMutedColor) }
                     }
                 }
