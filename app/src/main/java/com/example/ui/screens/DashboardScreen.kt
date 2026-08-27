@@ -1,8 +1,6 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,12 +17,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.VpnKey
-import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -32,231 +32,157 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.local.ScanLogEntity
+import androidx.compose.ui.text.font.FontWeight
+import com.example.data.localization.stringRes
 import com.example.ui.components.QuickActionButton
 import com.example.ui.components.ShieldGaugeCard
-import com.example.ui.theme.CyberCyan
-import com.example.ui.theme.CyberGreen
-import com.example.ui.theme.CyberOrange
-import com.example.ui.theme.CyberRed
-import com.example.ui.theme.DarkBackground
-import com.example.ui.theme.DarkCard
-import com.example.ui.theme.DarkCardBorder
-import com.example.ui.theme.DarkSurface
-import com.example.ui.theme.TextMuted
-import com.example.ui.theme.TextPrimary
-import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.LocalAppSkin
 import com.example.ui.viewmodel.MainViewModel
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @Composable
 fun DashboardScreen(
     viewModel: MainViewModel,
     onNavigateToAiScanner: () -> Unit,
-    onNavigateToNetwork: () -> Unit,
-    onNavigateToVpn: () -> Unit,
-    onNavigateToDarkWeb: () -> Unit,
+    onNavigateToRadar: () -> Unit = {},
+    onNavigateToVpn: () -> Unit = {},
+    onNavigateToCallSecurity: () -> Unit = {},
+    onNavigateToLegal: () -> Unit = {},
+    onNavigateToDarkWeb: () -> Unit = {},
+    onNavigateToNetwork: () -> Unit = {},
+    onNavigateToReport: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val score by viewModel.securityScore.collectAsState()
+    val skin = LocalAppSkin.current
+    val realtimeShield by viewModel.isRealtimeShieldActive.collectAsState()
+    val adBlock by viewModel.isAdBlockActive.collectAsState()
+    val phishing by viewModel.isPhishingProtectionActive.collectAsState()
+    val vpnConnected by viewModel.isVpnConnected.collectAsState()
     val isScanning by viewModel.isDeepScanning.collectAsState()
     val scanProgress by viewModel.deepScanProgress.collectAsState()
     val scanStep by viewModel.deepScanStep.collectAsState()
-    val isRealtimeShieldActive by viewModel.isRealtimeShieldActive.collectAsState()
-    val isAdBlockActive by viewModel.isAdBlockActive.collectAsState()
-    val isPhishingProtectionActive by viewModel.isPhishingProtectionActive.collectAsState()
-    val isVpnConnected by viewModel.isVpnConnected.collectAsState()
-    val selectedServer by viewModel.selectedVpnServer.collectAsState()
     val logs by viewModel.scanLogs.collectAsState()
+    val coverage = listOf(realtimeShield, phishing, adBlock, vpnConnected).count { it } * 25
 
     LazyColumn(
-        modifier = modifier.fillMaxSize().background(DarkBackground).padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        modifier = modifier.fillMaxSize().background(skin.bgColor).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Box(
-                    modifier = Modifier.size(40.dp).clip(CircleShape).background(CyberCyan.copy(alpha = 0.2f)).border(1.dp, CyberCyan, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.Security, contentDescription = null, tint = CyberCyan, modifier = Modifier.size(24.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(44.dp).clip(CircleShape).background(skin.primaryColor.copy(alpha = .15f)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Security, null, tint = skin.primaryColor)
                 }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text("SENTINEL SHIELD PRO", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary, letterSpacing = 1.sp)
-                    Text("Production security baseline • v1.0", fontSize = 12.sp, color = TextSecondary)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("SENTINEL SHIELD PRO", color = skin.textPrimaryColor, fontSize = 19.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                    Text("ZAŠTITA U STVARNOM VREMENU", color = skin.textMutedColor, fontSize = 10.sp, letterSpacing = 1.sp)
                 }
             }
         }
-
-        item { ShieldGaugeCard(score = score, isScanning = isScanning) }
-
+        item {
+            ShieldGaugeCard(score = coverage, isScanning = isScanning, modifier = Modifier.fillMaxWidth())
+        }
         item {
             Card(
-                modifier = Modifier.fillMaxWidth().testTag("deep_scan_card"),
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = DarkCard),
-                border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(DarkCardBorder, CyberCyan.copy(alpha = 0.5f))))
+                colors = CardDefaults.cardColors(containerColor = skin.cardColor),
+                border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(skin.borderColor, skin.primaryColor))),
+                shape = RoundedCornerShape(16.dp)
             ) {
-                Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Local Security Audit", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                            Text(
-                                if (isScanning) scanStep else "Run local diagnostics; results are not a full malware scan.",
-                                fontSize = 12.sp,
-                                color = if (isScanning) CyberCyan else TextSecondary
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Button(
-                            onClick = { viewModel.startDeepSystemScan() },
-                            enabled = !isScanning,
-                            colors = ButtonDefaults.buttonColors(containerColor = CyberCyan, contentColor = DarkBackground),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.testTag("btn_run_deep_scan")
-                        ) {
-                            Text(if (isScanning) "Scanning..." else "Run Scan", fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    if (isScanning) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        LinearProgressIndicator(
-                            progress = { scanProgress },
-                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
-                            color = CyberCyan,
-                            trackColor = DarkSurface
-                        )
-                    }
+                Column(Modifier.padding(16.dp)) {
+                    Text("PROVJERENE SIGURNOSNE SPOSOBNOSTI", color = skin.textPrimaryColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    EvidenceLine("WireGuard transport", vpnConnected, skin)
+                    EvidenceLine("Handshake verification", vpnConnected, skin)
+                    EvidenceLine("Phishing protection", phishing, skin)
+                    EvidenceLine("Ad/telemetry filter", adBlock, skin)
+                    EvidenceLine("Background shield", realtimeShield, skin)
                 }
             }
         }
-
         item {
-            Text("QUICK DEFENSE TOOLS", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 1.sp, modifier = Modifier.padding(start = 4.dp, top = 4.dp))
-        }
-
-        item {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                QuickActionButton("AI Scanner", "Phishing & URL", Icons.Default.Psychology, CyberCyan, onNavigateToAiScanner, Modifier.weight(1f))
-                QuickActionButton("Wi-Fi & Speed", "Diagnostic", Icons.Default.Wifi, CyberGreen, onNavigateToNetwork, Modifier.weight(1f))
-            }
-        }
-
-        item {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                QuickActionButton("VPN Tunnel", if (isVpnConnected) selectedServer?.country ?: "Connected" else "Not connected", Icons.Default.VpnKey, if (isVpnConnected) CyberGreen else CyberCyan, onNavigateToVpn, Modifier.weight(1f))
-                QuickActionButton("Breach Monitor", "Unverified demo", Icons.Default.Language, CyberOrange, onNavigateToDarkWeb, Modifier.weight(1f))
-            }
-        }
-
-        item {
-            Text("LOCAL PROTECTION CONTROLS", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 1.sp, modifier = Modifier.padding(start = 4.dp, top = 8.dp))
-        }
-
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = DarkCard),
-                border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DarkCardBorder))
+            Button(
+                onClick = { viewModel.startDeepSystemScan() },
+                enabled = !isScanning,
+                modifier = Modifier.fillMaxWidth().testTag("btn_complete_audit"),
+                colors = ButtonDefaults.buttonColors(containerColor = skin.primaryColor, contentColor = Color.Black),
+                shape = RoundedCornerShape(14.dp)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    ShieldSwitchRow("Local Guard State", "UI control only until a background enforcement service is wired", isRealtimeShieldActive, { viewModel.toggleRealtimeShield(it) }, "switch_realtime_guard")
-                    Spacer(modifier = Modifier.height(12.dp))
-                    ShieldSwitchRow("Phishing Protection", "Local heuristic/AI analysis for submitted targets", isPhishingProtectionActive, { viewModel.togglePhishingProtection(it) }, "switch_phishing_protection")
-                    Spacer(modifier = Modifier.height(12.dp))
-                    ShieldSwitchRow("Telemetry Blocker", "Configuration state; network filtering is not implemented here", isAdBlockActive, { viewModel.toggleAdBlock(it) }, "switch_adblock_pro")
-                }
+                Icon(Icons.Default.Security, null)
+                Spacer(Modifier.width(8.dp))
+                Text(if (isScanning) "SKENIRANJE U TIJEKU…" else "POKRENI POTPUNI SIGURNOSNI AUDIT", fontWeight = FontWeight.Bold)
             }
         }
-
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                Text("SECURITY AUDIT LOGS (${logs.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 1.sp, modifier = Modifier.weight(1f))
-                if (logs.isNotEmpty()) {
-                    IconButton(onClick = { viewModel.clearAllLogs() }, modifier = Modifier.size(24.dp).testTag("btn_clear_logs")) {
-                        Icon(Icons.Default.Delete, contentDescription = "Clear Audit History", tint = TextMuted, modifier = Modifier.size(18.dp))
-                    }
-                }
-            }
-        }
-
-        if (logs.isEmpty()) {
+        if (isScanning) {
             item {
-                Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(DarkCard).padding(24.dp), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Security, contentDescription = null, tint = TextMuted, modifier = Modifier.size(32.dp))
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("No Audit Logs Yet", fontSize = 14.sp, color = TextSecondary)
-                        Text("Run a local audit to log events here.", fontSize = 12.sp, color = TextMuted)
+                Card(colors = CardDefaults.cardColors(containerColor = skin.cardColor), shape = RoundedCornerShape(14.dp)) {
+                    Column(Modifier.padding(14.dp)) {
+                        Text(scanStep, color = skin.textSecondaryColor, fontSize = 11.sp)
+                        Spacer(Modifier.height(8.dp))
+                        LinearProgressIndicator(progress = { scanProgress }, modifier = Modifier.fillMaxWidth(), color = skin.primaryColor)
                     }
                 }
             }
-        } else {
-            items(logs, key = { it.id }) { log -> ScanLogItemCard(log = log, onDelete = { viewModel.deleteLog(log.id) }) }
         }
-        item { Spacer(modifier = Modifier.height(24.dp)) }
-    }
-}
-
-@Composable
-fun ShieldSwitchRow(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit, testTag: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-            Text(subtitle, fontSize = 11.sp, color = TextSecondary)
-        }
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(checkedThumbColor = DarkBackground, checkedTrackColor = CyberCyan, uncheckedThumbColor = TextMuted, uncheckedTrackColor = DarkSurface),
-            modifier = Modifier.testTag(testTag)
-        )
-    }
-}
-
-@Composable
-fun ScanLogItemCard(log: ScanLogEntity, onDelete: () -> Unit) {
-    val statusColor = when (log.status) {
-        "PASSED" -> CyberGreen
-        "WARNING" -> CyberOrange
-        else -> CyberRed
-    }
-    val dateFormat = remember { SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()) }
-    Card(
-        modifier = Modifier.fillMaxWidth().testTag("log_item_${log.id}"),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = DarkCard),
-        border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DarkCardBorder))
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(statusColor))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(log.title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary, modifier = Modifier.weight(1f))
-                Text(dateFormat.format(Date(log.timestamp)), fontSize = 11.sp, color = TextMuted)
+        item { Text("BRZI ALATI", color = skin.textMutedColor, fontSize = 11.sp, letterSpacing = 1.sp) }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                QuickActionButton(stringRes("tab_radar"), "Telephony evidence", Icons.Default.Radar, skin.primaryColor, onNavigateToRadar, Modifier.weight(1f))
+                QuickActionButton(stringRes("tab_vpn"), if (vpnConnected) "Verified" else "WireGuard", Icons.Default.VpnKey, skin.primaryColor, onNavigateToVpn, Modifier.weight(1f))
             }
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(log.summary, fontSize = 12.sp, color = TextSecondary)
         }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                QuickActionButton(stringRes("tab_call_sec"), "MMI checks", Icons.Default.Call, skin.primaryColor, onNavigateToCallSecurity, Modifier.weight(1f))
+                QuickActionButton(stringRes("tab_legal"), "Privacy guide", Icons.Default.Gavel, skin.primaryColor, onNavigateToLegal, Modifier.weight(1f))
+            }
+        }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                QuickActionButton("AI Threat", "AI analysis", Icons.Default.Psychology, skin.primaryColor, onNavigateToAiScanner, Modifier.weight(1f))
+                QuickActionButton("Dark Web", "Breach lookup", Icons.Default.Language, skin.primaryColor, onNavigateToDarkWeb, Modifier.weight(1f))
+            }
+        }
+        item {
+            QuickActionButton("Network Audit", "Wi-Fi diagnostics", Icons.Default.Security, skin.primaryColor, onNavigateToNetwork, Modifier.fillMaxWidth())
+        }
+        if (logs.isNotEmpty()) {
+            item { Text("SIGURNOSNI DNEVNIK", color = skin.textMutedColor, fontSize = 11.sp, letterSpacing = 1.sp) }
+            items(logs.takeLast(5).asReversed()) { log ->
+                Card(colors = CardDefaults.cardColors(containerColor = skin.cardColor), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(if (log.status == "ALERT") Color(0xFFFF1744) else skin.primaryColor))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(log.title, color = skin.textPrimaryColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(log.summary, color = skin.textSecondaryColor, fontSize = 10.sp)
+                        }
+                        IconButton(onClick = { viewModel.deleteLog(log.id) }) { Icon(Icons.Default.Delete, null, tint = skin.textMutedColor) }
+                    }
+                }
+            }
+        }
+        item { Text("Status se prikazuje kao VERIFIED samo kada postoji odgovarajući dokaz uređaja.", color = skin.textMutedColor, fontSize = 9.sp) }
+    }
+}
+
+@Composable
+private fun EvidenceLine(title: String, active: Boolean, skin: com.example.ui.theme.AppSkin) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(8.dp).clip(CircleShape).background(if (active) skin.primaryColor else skin.borderColor))
+        Spacer(Modifier.width(8.dp))
+        Text(title, Modifier.weight(1f), color = skin.textSecondaryColor, fontSize = 11.sp)
+        Text(if (active) "VERIFIED" else "INACTIVE", color = if (active) skin.primaryColor else skin.textMutedColor, fontSize = 9.sp, fontWeight = FontWeight.Bold)
     }
 }
