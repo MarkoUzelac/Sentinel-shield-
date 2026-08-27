@@ -73,51 +73,35 @@ fun VpnManagerScreen(viewModel: MainViewModel, onImportWireGuardProfile: () -> U
 
     LazyColumn(modifier = modifier.fillMaxSize().background(DarkBackground).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
-            Text(
-                text = "WIREGUARD VPN LIFECYCLE",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextMuted,
-                letterSpacing = 1.sp
-            )
+            Text(text = "WIREGUARD VPN LIFECYCLE", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 1.sp)
             Spacer(Modifier.height(4.dp))
-            Text(
-                text = "Povezan tunel prikazuje se tek nakon odgovarajuće provjere handshakea.",
-                fontSize = 13.sp,
-                color = TextSecondary
-            )
+            Text(text = "Povezan tunel prikazuje se tek nakon odgovarajuće provjere handshakea.", fontSize = 13.sp, color = TextSecondary)
             Spacer(Modifier.height(8.dp))
             transportEvidence?.let { evidenceItem -> CapabilityEvidenceCard(evidence = evidenceItem) }
             Spacer(Modifier.height(8.dp))
             handshakeEvidence?.let { evidenceItem -> CapabilityEvidenceCard(evidence = evidenceItem) }
             Spacer(Modifier.height(4.dp))
-            Text(
-                text = if (isProvisioned) "REAL PROFILE PROVISIONED" else "PROFILE NOT PROVISIONED",
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (isProvisioned) CyberGreen else TextMuted,
-                letterSpacing = 1.sp
-            )
+            Text(text = if (isProvisioned) "REAL PROFILE PROVISIONED" else "PROFILE NOT PROVISIONED", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (isProvisioned) CyberGreen else TextMuted, letterSpacing = 1.sp)
         }
 
         item {
             Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = DarkCard), border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(DarkCardBorder, CyberOrange.copy(alpha = .55f))))) {
                 Column(Modifier.fillMaxWidth().padding(18.dp)) {
-                    Text("PROVISION REAL VPN", 12.sp, FontWeight.Bold, TextMuted, letterSpacing = 1.sp)
+                    Text(text = "PROVISION REAL VPN", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 1.sp)
                     Spacer(Modifier.height(6.dp))
-                    Text("Uvezi WireGuard .conf profil. Privatni ključ ostaje u privatnoj pohrani aplikacije.", 12.sp, color = TextSecondary)
+                    Text(text = "Uvezi WireGuard .conf profil. Privatni ključ ostaje u privatnoj pohrani aplikacije.", fontSize = 12.sp, color = TextSecondary)
                     Spacer(Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                         Button(onClick = onImportWireGuardProfile, colors = ButtonDefaults.buttonColors(containerColor = CyberOrange), modifier = Modifier.weight(1f).height(46.dp), shape = RoundedCornerShape(12.dp)) {
-                            Icon(Icons.Default.UploadFile, null)
+                            Icon(Icons.Default.UploadFile, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
-                            Text("Import .conf", fontWeight = FontWeight.Bold)
+                            Text(text = "Import .conf", fontWeight = FontWeight.Bold)
                         }
                         if (isProvisioned) {
                             Button(onClick = viewModel::removeWireGuardProfile, colors = ButtonDefaults.buttonColors(containerColor = DarkCardBorder), modifier = Modifier.height(46.dp), shape = RoundedCornerShape(12.dp)) {
-                                Icon(Icons.Default.Delete, null)
+                                Icon(Icons.Default.Delete, contentDescription = null)
                                 Spacer(Modifier.width(6.dp))
-                                Text("Remove", fontWeight = FontWeight.Bold)
+                                Text(text = "Remove", fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -129,11 +113,11 @@ fun VpnManagerScreen(viewModel: MainViewModel, onImportWireGuardProfile: () -> U
             Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = DarkCard), border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(DarkCardBorder, if (isConnected) CyberGreen else CyberCyan)))) {
                 Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(Modifier.size(90.dp).clip(CircleShape).background(if (isConnected) CyberGreen.copy(alpha = .2f) else CyberCyan.copy(alpha = .15f)).border(2.dp, if (isConnected) CyberGreen else CyberCyan, CircleShape), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.VpnKey, null, tint = if (isConnected) CyberGreen else CyberCyan, modifier = Modifier.size(44.dp))
+                        Icon(Icons.Default.VpnKey, contentDescription = null, tint = if (isConnected) CyberGreen else CyberCyan, modifier = Modifier.size(44.dp))
                     }
                     Spacer(Modifier.height(16.dp))
                     Text(
-                        when (vpnState) {
+                        text = when (vpnState) {
                             is WireGuardTunnelState.Connected -> "TUNNEL VERIFIED"
                             is WireGuardTunnelState.Starting -> "STARTING TUNNEL"
                             is WireGuardTunnelState.Verifying -> "VERIFYING HANDSHAKE"
@@ -147,7 +131,7 @@ fun VpnManagerScreen(viewModel: MainViewModel, onImportWireGuardProfile: () -> U
                         letterSpacing = 1.sp
                     )
                     Text(
-                        when (val state = vpnState) {
+                        text = when (val state = vpnState) {
                             is WireGuardTunnelState.Connected -> "Encrypted transport verified. Handshake: ${state.latestHandshakeEpochSeconds}"
                             is WireGuardTunnelState.Error -> state.message
                             is WireGuardTunnelState.AwaitingUserConsent -> "Approve Android VPN permission to continue."
@@ -165,7 +149,7 @@ fun VpnManagerScreen(viewModel: MainViewModel, onImportWireGuardProfile: () -> U
                             CircularProgressIndicator(Modifier.size(18.dp), color = DarkBackground, strokeWidth = 2.dp)
                             Spacer(Modifier.width(8.dp))
                         }
-                        Text(if (isConnected) "Disconnect VPN" else "Start Verified VPN", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text(text = if (isConnected) "Disconnect VPN" else "Start Verified VPN", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     }
                 }
             }
@@ -177,7 +161,7 @@ fun VpnManagerScreen(viewModel: MainViewModel, onImportWireGuardProfile: () -> U
                 VpnSpecCard("Endpoint", if (selectedServer?.ipAddress.isNullOrBlank()) "Not provisioned" else "Metadata only", Icons.Default.Public, Modifier.weight(1f))
             }
         }
-        item { Text("SERVER LOCATIONS (${servers.size})", 12.sp, FontWeight.Bold, TextMuted, letterSpacing = 1.sp) }
+        item { Text(text = "SERVER LOCATIONS (${servers.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 1.sp) }
         items(servers, key = { it.id }) { server ->
             VpnServerCard(server, selectedServer?.id == server.id, isConnected && selectedServer?.id == server.id, onSelect = { viewModel.selectVpnServer(server) })
         }
@@ -188,9 +172,12 @@ fun VpnManagerScreen(viewModel: MainViewModel, onImportWireGuardProfile: () -> U
 fun VpnSpecCard(title: String, value: String, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier = Modifier) {
     Card(modifier = modifier, shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = DarkCard), border = CardDefaults.outlinedCardBorder().copy(brush = SolidColor(DarkCardBorder))) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = CyberCyan, modifier = Modifier.size(20.dp))
+            Icon(icon, contentDescription = null, tint = CyberCyan, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
-            Column { Text(title, fontSize = 10.sp, color = TextMuted); Text(value, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary) }
+            Column {
+                Text(text = title, fontSize = 10.sp, color = TextMuted)
+                Text(text = value, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+            }
         }
     }
 }
