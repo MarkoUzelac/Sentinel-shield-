@@ -31,9 +31,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -42,6 +42,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.localization.stringRes
+import com.example.data.model.CapabilityEvidenceSnapshot
 import com.example.data.model.CapabilityId
 import com.example.ui.components.CapabilityEvidenceCard
 import com.example.ui.theme.LocalAppSkin
@@ -57,7 +58,8 @@ fun CallSecurityScreen(
     val context = LocalContext.current
     val skin = LocalAppSkin.current
     val evidence by viewModel.capabilityEvidence.collectAsState()
-    val callEvidence = evidence.firstOrNull { it.id == CapabilityId.CALL_MMI }
+    val evidenceSnapshot = remember(evidence) { CapabilityEvidenceSnapshot.from(evidence) }
+    val callEvidence = evidenceSnapshot.get(CapabilityId.CALL_MMI)
     var micMonitor by remember { mutableStateOf(false) }
     var smsProtection by remember { mutableStateOf(true) }
     var silentSmsAlert by remember { mutableStateOf(false) }
