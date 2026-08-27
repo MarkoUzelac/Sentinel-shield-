@@ -2,7 +2,9 @@ package com.example.vpn
 
 import android.content.Context
 import com.wireguard.config.Config
+import java.io.BufferedReader
 import java.io.File
+import java.io.StringReader
 
 /** Stores the user's WireGuard profile only inside app-private storage. */
 class WireGuardProfileStore(context: Context) {
@@ -13,13 +15,15 @@ class WireGuardProfileStore(context: Context) {
         require(profileFile.isFile && profileFile.length() > 0) {
             "WireGuard profile is not provisioned"
         }
-        return profileFile.inputStream().bufferedReader().use { Config.parse(it) }
+        val reader = BufferedReader(profileFile.reader(Charsets.UTF_8))
+        return reader.use { Config.parse(it) }
     }
 
     @Synchronized
     fun importProfile(profileText: String): Result<Unit> = runCatching {
         require(profileText.isNotBlank()) { "WireGuard profile is empty" }
-        profileText.reader().bufferedReader().use { Config.parse(it) }
+        val reader = BufferedReader(StringReader(profileText))
+        reader.use { Config.parse(it) }
 
         val tempFile = File(profileFile.parentFile, "$PROFILE_FILE_NAME.tmp")
         tempFile.writeText(profileText, Charsets.UTF_8)
