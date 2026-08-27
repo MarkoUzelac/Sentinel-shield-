@@ -16,11 +16,23 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /** Shared, UI-facing threat snapshot. Screens consume the same correlation result. */
 object ThreatSnapshotStore {
+    private const val MAX_HISTORY = 30
     private val _snapshot = MutableStateFlow(ThreatSnapshot())
+    private val _history = MutableStateFlow<List<ThreatSnapshot>>(emptyList())
+
     val snapshot: StateFlow<ThreatSnapshot> = _snapshot.asStateFlow()
+    val history: StateFlow<List<ThreatSnapshot>> = _history.asStateFlow()
 
     fun publish(snapshot: ThreatSnapshot) {
         _snapshot.value = snapshot
+        _history.value = buildList {
+            addAll(_history.value.takeLast(MAX_HISTORY - 1))
+            add(snapshot)
+        }
+    }
+
+    fun clearHistory() {
+        _history.value = emptyList()
     }
 }
 
@@ -115,16 +127,11 @@ fun MainViewModel.publishSignalIntelligence(
         )
 
         val vpnObservation = when (val state = vpnState.value) {
-            is WireGuardTunnelState.Connected -> {
-                SignalObservation(
-                    id = "vpn-state",
-                    source = ObservationSource.VPN,
-                    kind = ObservationKind.VPN_STATE,
-                    observedAtEpochMs = nowEpochMs,
-                    evidenceState = EvidenceState.VERIFIED,
-                    details = "connected;handshake=${state.latestHandshakeEpochSeconds}"
-                )
-            }
+            is WireGuardTunnelState.Connected -> SignalObservation(
+                id = "vpn-state", source = ObservationSource.VPN, kind = ObservationKind.VPN_STATE,
+                observedAtEpochMs = nowEpochMs, evidenceState = EvidenceState.VERIFIED,
+                details = "connected;handshake=${state.latestHandshakeEpochSeconds}"
+            )
             WireGuardTunnelState.Disconnected -> SignalObservation("vpn-state", ObservationSource.VPN, ObservationKind.VPN_STATE, nowEpochMs, evidenceState = EvidenceState.UNAVAILABLE, details = "down")
             WireGuardTunnelState.AwaitingUserConsent -> SignalObservation("vpn-state", ObservationSource.VPN, ObservationKind.VPN_STATE, nowEpochMs, details = "unverified;awaiting_consent")
             WireGuardTunnelState.Starting -> SignalObservation("vpn-state", ObservationSource.VPN, ObservationKind.VPN_STATE, nowEpochMs, details = "unverified;starting")
