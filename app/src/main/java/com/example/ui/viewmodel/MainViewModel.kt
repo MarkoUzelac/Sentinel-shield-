@@ -134,9 +134,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (result.isSuccess) {
             _isVpnProvisioned.value = true
             vpnController.markError("WireGuard profile imported; ready to connect")
+        } else {
+            vpnController.markError(result.exceptionOrNull()?.message ?: "Invalid WireGuard profile")
         }
         return result
     }
+
+    fun reportVpnError(message: String) = vpnController.markError(message)
 
     fun removeWireGuardProfile() {
         vpnController.stop()
@@ -169,6 +173,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             updateSecurityScore()
         }
     }
+
+    fun onVpnStateChanged(state: WireGuardTunnelState) { if (state is WireGuardTunnelState.Connected) updateSecurityScore() }
 
     fun startDeepSystemScan() {
         if (_isDeepScanning.value) return
