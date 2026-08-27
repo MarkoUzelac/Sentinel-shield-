@@ -31,7 +31,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,12 +45,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import com.example.data.DeviceLocationProvider
 import com.example.data.SignalRadarProvider
-import com.example.data.ThreatSnapshotStore
-import com.example.data.model.SignalKind
 import com.example.data.model.SignalRadarItem
 import com.example.data.model.SignalRisk
 import com.example.data.model.ThreatRisk
-import com.example.data.publishSignalIntelligence
 import com.example.ui.components.CapabilityEvidenceCard
 import com.example.ui.components.TacticalRadarMap
 import com.example.ui.theme.LocalAppSkin
@@ -67,9 +63,7 @@ fun ImsiRadarScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
     val radarProvider = remember(context) { SignalRadarProvider(context.applicationContext, locationProvider) }
     val location by locationProvider.state.collectAsState()
     val radar by radarProvider.snapshot.collectAsState()
-    val network by viewModel.networkObservation.collectAsState()
-    val vpn by viewModel.vpnState.collectAsState()
-    val threat by ThreatSnapshotStore.snapshot.collectAsState()
+    val threat by viewModel.threatSnapshot.collectAsState()
     var permissionRequested by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -86,10 +80,6 @@ fun ImsiRadarScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
             radarProvider.stop()
             locationProvider.stop()
         }
-    }
-
-    LaunchedEffect(location, radar, network, vpn) {
-        viewModel.publishSignalIntelligence(location, radar)
     }
 
     fun requestSensors() {
@@ -134,11 +124,7 @@ fun ImsiRadarScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
         item { TacticalRadarMap(location = location, signals = radar.signals) }
 
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = skin.cardColor)
-            ) {
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = skin.cardColor)) {
                 Column(Modifier.padding(16.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Column(Modifier.weight(1f)) {
@@ -161,21 +147,12 @@ fun ImsiRadarScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                     }
                     Spacer(Modifier.height(12.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = { requestSensors() },
-                            colors = ButtonDefaults.buttonColors(containerColor = skin.primaryColor, contentColor = Color.Black),
-                            modifier = Modifier.weight(1f)
-                        ) {
+                        Button(onClick = ::requestSensors, colors = ButtonDefaults.buttonColors(containerColor = skin.primaryColor, contentColor = Color.Black), modifier = Modifier.weight(1f)) {
                             Icon(Icons.Default.Refresh, null)
                             Spacer(Modifier.width(5.dp))
                             Text(if (permissionRequested) "PONOVI" else "AKTIVIRAJ RADAR")
                         }
-                        Button(
-                            onClick = ::openMaps,
-                            enabled = location.hasFix && location.isFresh,
-                            colors = ButtonDefaults.buttonColors(containerColor = skin.cardColor, contentColor = skin.primaryColor),
-                            modifier = Modifier.weight(1f)
-                        ) {
+                        Button(onClick = ::openMaps, enabled = location.hasFix && location.isFresh, colors = ButtonDefaults.buttonColors(containerColor = skin.cardColor, contentColor = skin.primaryColor), modifier = Modifier.weight(1f)) {
                             Icon(Icons.Default.LocationOn, null)
                             Spacer(Modifier.width(5.dp))
                             Text("GOOGLE MAPS")
@@ -207,12 +184,7 @@ fun ImsiRadarScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                 Column(Modifier.padding(15.dp)) {
                     Text("OGRANIČENJA DETEKCIJE", color = skin.textPrimaryColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(5.dp))
-                    Text(
-                        "Android može dati stvarne Bluetooth LE i ćelijske telemetrijske zapise, ali aplikacija ne može dobiti IMSI identitet okolnih telefona, fizički utišati baznu stanicu ili pouzdano odrediti GPS koordinatu tuđeg uređaja bez dodatnog izvora. IMSI-catcher procjena zato ostaje heuristička i UNVERIFIED.",
-                        color = skin.textMutedColor,
-                        fontSize = 10.sp,
-                        lineHeight = 15.sp
-                    )
+                    Text("Android može dati stvarne Bluetooth LE i ćelijske telemetrijske zapise, ali aplikacija ne može dobiti IMSI identitet okolnih telefona, fizički utišati baznu stanicu ili pouzdano odrediti GPS koordinatu tuđeg uređaja bez dodatnog izvora. IMSI-catcher procjena zato ostaje heuristička i UNVERIFIED.", color = skin.textMutedColor, fontSize = 10.sp, lineHeight = 15.sp)
                 }
             }
         }
@@ -222,12 +194,7 @@ fun ImsiRadarScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ThreatSummaryCard(
-    score: Int,
-    risk: ThreatRisk,
-    findings: List<String>,
-    skin: com.example.ui.theme.AppSkin
-) {
+private fun ThreatSummaryCard(score: Int, risk: ThreatRisk, findings: List<String>, skin: com.example.ui.theme.AppSkin) {
     val label = when (risk) {
         ThreatRisk.NORMAL -> "NORMAL"
         ThreatRisk.WATCH -> "WATCH"
@@ -243,14 +210,8 @@ private fun ThreatSummaryCard(
                 }
                 Text("$score/100", color = skin.primaryColor, fontSize = 21.sp, fontWeight = FontWeight.Black)
             }
-            findings.forEach { finding ->
-                Spacer(Modifier.height(4.dp))
-                Text("• $finding", color = skin.textMutedColor, fontSize = 9.sp)
-            }
-            if (findings.isEmpty()) {
-                Spacer(Modifier.height(4.dp))
-                Text("Nema koreliranih anomalija u trenutnom vremenskom prozoru.", color = skin.textMutedColor, fontSize = 9.sp)
-            }
+            findings.forEach { finding -> Spacer(Modifier.height(4.dp)); Text("• $finding", color = skin.textMutedColor, fontSize = 9.sp) }
+            if (findings.isEmpty()) { Spacer(Modifier.height(4.dp)); Text("Nema koreliranih anomalija u trenutnom vremenskom prozoru.", color = skin.textMutedColor, fontSize = 9.sp) }
         }
     }
 }
