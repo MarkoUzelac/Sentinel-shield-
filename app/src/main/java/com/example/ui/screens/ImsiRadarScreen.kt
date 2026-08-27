@@ -23,7 +23,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Radar
-import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -32,12 +31,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -45,9 +46,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import com.example.data.DeviceLocationProvider
 import com.example.data.SignalRadarProvider
+import com.example.data.ThreatSnapshotStore
 import com.example.data.model.SignalKind
 import com.example.data.model.SignalRadarItem
 import com.example.data.model.SignalRisk
+import com.example.data.model.ThreatRisk
+import com.example.data.publishSignalIntelligence
 import com.example.ui.components.CapabilityEvidenceCard
 import com.example.ui.components.TacticalRadarMap
 import com.example.ui.theme.LocalAppSkin
@@ -63,6 +67,9 @@ fun ImsiRadarScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
     val radarProvider = remember(context) { SignalRadarProvider(context.applicationContext, locationProvider) }
     val location by locationProvider.state.collectAsState()
     val radar by radarProvider.snapshot.collectAsState()
+    val network by viewModel.networkObservation.collectAsState()
+    val vpn by viewModel.vpnState.collectAsState()
+    val threat by ThreatSnapshotStore.snapshot.collectAsState()
     var permissionRequested by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -79,6 +86,10 @@ fun ImsiRadarScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
             radarProvider.stop()
             locationProvider.stop()
         }
+    }
+
+    LaunchedEffect(location, radar, network, vpn) {
+        viewModel.publishSignalIntelligence(location, radar)
     }
 
     fun requestSensors() {
@@ -120,10 +131,7 @@ fun ImsiRadarScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
         }
 
         item { radarEvidence?.let { CapabilityEvidenceCard(it) } }
-
-        item {
-            TacticalRadarMap(location = location, signals = radar.signals)
-        }
+        item { TacticalRadarMap(location = location, signals = radar.signals) }
 
         item {
             Card(
@@ -146,7 +154,7 @@ fun ImsiRadarScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                             location.accuracyMeters?.let { Text("Točnost ±${it.toInt()} m", color = skin.textMutedColor, fontSize = 10.sp) }
                             Text("Provider: ${location.provider} · Sateliti: ${location.satelliteCount}", color = skin.textMutedColor, fontSize = 10.sp)
                         }
-                        Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
+                        Column(horizontalAlignment = Alignment.End) {
                             Text("${radar.totalCount}", color = skin.primaryColor, fontSize = 26.sp, fontWeight = FontWeight.Black)
                             Text("OPAŽANJA", color = skin.textMutedColor, fontSize = 9.sp)
                         }
@@ -178,6 +186,15 @@ fun ImsiRadarScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
         }
 
         item {
+            ThreatSummaryCard(
+                score = threat.score,
+                risk = threat.risk,
+                findings = threat.findings.map { "${it.title} · ${it.evidenceState.name}" }.take(3),
+                skin = skin
+            )
+        }
+
+        item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 RadarMetric("BLE", radar.bleCount.toString(), skin.primaryColor, Modifier.weight(1f))
                 RadarMetric("CELL", radar.cellularCount.toString(), skin.primaryColor, Modifier.weight(1f))
@@ -186,11 +203,7 @@ fun ImsiRadarScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
         }
 
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = skin.cardColor)
-            ) {
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = skin.cardColor)) {
                 Column(Modifier.padding(15.dp)) {
                     Text("OGRANIČENJA DETEKCIJE", color = skin.textPrimaryColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(5.dp))
@@ -204,8 +217,40 @@ fun ImsiRadarScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
             }
         }
 
-        items(radar.signals.take(30), key = { it.id }) { signal ->
-            SignalRow(signal, skin)
+        items(radar.signals.take(30), key = { it.id }) { signal -> SignalRow(signal, skin) }
+    }
+}
+
+@Composable
+private fun ThreatSummaryCard(
+    score: Int,
+    risk: ThreatRisk,
+    findings: List<String>,
+    skin: com.example.ui.theme.AppSkin
+) {
+    val label = when (risk) {
+        ThreatRisk.NORMAL -> "NORMAL"
+        ThreatRisk.WATCH -> "WATCH"
+        ThreatRisk.SUSPICIOUS -> "SUSPICIOUS"
+        ThreatRisk.HIGH -> "HIGH RISK"
+    }
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = skin.cardColor)) {
+        Column(Modifier.padding(15.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Column(Modifier.weight(1f)) {
+                    Text("SIGNAL INTELLIGENCE", color = skin.textPrimaryColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(label, color = skin.primaryColor, fontSize = 18.sp, fontWeight = FontWeight.Black)
+                }
+                Text("$score/100", color = skin.primaryColor, fontSize = 21.sp, fontWeight = FontWeight.Black)
+            }
+            findings.forEach { finding ->
+                Spacer(Modifier.height(4.dp))
+                Text("• $finding", color = skin.textMutedColor, fontSize = 9.sp)
+            }
+            if (findings.isEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                Text("Nema koreliranih anomalija u trenutnom vremenskom prozoru.", color = skin.textMutedColor, fontSize = 9.sp)
+            }
         }
     }
 }
@@ -239,6 +284,7 @@ private fun SignalRow(signal: SignalRadarItem, skin: com.example.ui.theme.AppSki
             signal.rssiDbm?.let { Text("RSSI ${it} dBm", color = skin.textSecondaryColor, fontSize = 10.sp) }
             signal.estimatedDistanceMeters?.let { Text("Procjena udaljenosti ≈ ${"%.1f".format(it)} m", color = skin.textSecondaryColor, fontSize = 10.sp) }
             signal.cellId?.let { Text("Cell ID $it · Area ${signal.areaCode ?: -1}", color = skin.textMutedColor, fontSize = 9.sp) }
+            signal.locationSource?.let { Text("Lokacija: $it", color = skin.primaryColor, fontSize = 9.sp) }
             Text(signal.explanation, color = skin.textMutedColor, fontSize = 9.sp, lineHeight = 13.sp)
         }
     }
