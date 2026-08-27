@@ -27,10 +27,7 @@ import com.example.data.model.CapabilityStatus
 import com.example.ui.theme.LocalAppSkin
 
 @Composable
-fun CapabilityEvidenceCard(
-    evidence: CapabilityEvidence,
-    modifier: Modifier = Modifier
-) {
+fun CapabilityEvidenceCard(evidence: CapabilityEvidence, modifier: Modifier = Modifier) {
     val skin = LocalAppSkin.current
     val accent = when (evidence.status) {
         CapabilityStatus.VERIFIED -> skin.primaryColor
@@ -38,12 +35,8 @@ fun CapabilityEvidenceCard(
         CapabilityStatus.UNAVAILABLE -> skin.textMutedColor
     }
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(skin.cardColor)
-            .border(1.dp, accent.copy(alpha = .5f), RoundedCornerShape(14.dp))
-            .padding(14.dp)
+        modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(skin.cardColor)
+            .border(1.dp, accent.copy(alpha = .5f), RoundedCornerShape(14.dp)).padding(14.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(Modifier.size(9.dp).clip(CircleShape).background(accent))
