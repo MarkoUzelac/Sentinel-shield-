@@ -83,13 +83,12 @@ fun NetworkSpeedScreen(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Measure network throughput and audit Wi-Fi router encryption & DNS security.",
+                text = "Network diagnostics are currently simulated in this build.",
                 fontSize = 13.sp,
-                color = TextSecondary
+                color = CyberOrange
             )
         }
 
-        // Circular Speedometer Card
         item {
             Card(
                 modifier = Modifier
@@ -107,10 +106,7 @@ fun NetworkSpeedScreen(
                         .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier.size(180.dp)
-                    ) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(180.dp)) {
                         Canvas(modifier = Modifier.size(170.dp)) {
                             val strokeWidth = 14.dp.toPx()
                             drawArc(
@@ -120,7 +116,9 @@ fun NetworkSpeedScreen(
                                 useCenter = false,
                                 style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
                             )
-                            val sweepFraction = if (result != null) (result!!.downloadMbps / 300.0).toFloat().coerceIn(0.1f, 1f) else 0.6f
+                            val sweepFraction = if (result != null) {
+                                (result!!.downloadMbps / 300.0).toFloat().coerceIn(0.1f, 1f)
+                            } else 0.1f
                             drawArc(
                                 brush = Brush.sweepGradient(listOf(CyberCyan, CyberGreen)),
                                 startAngle = 135f,
@@ -129,33 +127,28 @@ fun NetworkSpeedScreen(
                                 style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
                             )
                         }
-
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = if (result != null) "%.1f".format(result!!.downloadMbps) else "184.5",
+                                text = result?.downloadMbps?.let { "%.1f".format(it) } ?: "—",
                                 fontSize = 36.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TextPrimary
                             )
                             Text(
-                                text = "DOWNLOAD Mbps",
+                                text = if (result != null) "SIMULATED DOWNLOAD Mbps" else "NO VERIFIED RESULT",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = CyberGreen,
+                                color = if (result != null) CyberOrange else TextMuted,
                                 letterSpacing = 1.sp
                             )
                         }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
-
                     Button(
                         onClick = { viewModel.runSpeedAndSecurityAudit() },
                         enabled = !isTesting,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = CyberGreen,
-                            contentColor = DarkBackground
-                        ),
+                        colors = ButtonDefaults.buttonColors(containerColor = CyberGreen, contentColor = DarkBackground),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -163,36 +156,39 @@ fun NetworkSpeedScreen(
                             .testTag("btn_run_speed_test")
                     ) {
                         if (isTesting) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = DarkBackground,
-                                strokeWidth = 2.dp
-                            )
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = DarkBackground, strokeWidth = 2.dp)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Auditing Wi-Fi Sockets...", fontWeight = FontWeight.Bold)
+                            Text("Running diagnostics...", fontWeight = FontWeight.Bold)
                         } else {
                             Icon(imageVector = Icons.Default.Refresh, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Run Speed & Security Audit", fontWeight = FontWeight.Bold)
+                            Text("Run Network Diagnostic", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             }
         }
 
-        // Live Network Metrics Grid
         item {
-            val res = result ?: NetworkSpeedResult(16.4, 184.5, 42.8, 2.1, "Sentinel_Secure_5G", "WPA3-Personal", true, "185.220.101.44")
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                MetricCard(title = "Ping Latency", value = "${res.pingMs} ms", subtitle = "Jitter ${res.jitterMs}ms", color = CyberCyan, modifier = Modifier.weight(1f))
-                MetricCard(title = "Upload Speed", value = "${res.uploadMbps} Mbps", subtitle = "Bandwidth OK", color = CyberGreen, modifier = Modifier.weight(1f))
+            if (result == null) {
+                Text(
+                    text = "Run the diagnostic to display test output. Until then, no network metric is treated as verified.",
+                    fontSize = 12.sp,
+                    color = TextMuted,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+            } else {
+                val res = result!!
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    MetricCard(title = "Ping Latency", value = "${res.pingMs} ms", subtitle = "Simulated", color = CyberCyan, modifier = Modifier.weight(1f))
+                    MetricCard(title = "Upload Speed", value = "${res.uploadMbps} Mbps", subtitle = "Simulated", color = CyberGreen, modifier = Modifier.weight(1f))
+                }
             }
         }
 
-        // Wi-Fi Security Audit Panel
         item {
             Text(
                 text = "WI-FI SECURITY DIAGNOSTICS",
@@ -205,107 +201,34 @@ fun NetworkSpeedScreen(
         }
 
         item {
-            val res = result ?: NetworkSpeedResult(16.4, 184.5, 42.8, 2.1, "Sentinel_Secure_5G", "WPA3-Personal", true, "185.220.101.44")
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = DarkCard),
-                border = CardDefaults.outlinedCardBorder().copy(
-                    brush = androidx.compose.ui.graphics.SolidColor(DarkCardBorder)
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    AuditItemRow(
-                        icon = Icons.Default.Router,
-                        title = "Wi-Fi Network SSID",
-                        value = res.wifiSsid,
-                        isSecure = true
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    AuditItemRow(
-                        icon = Icons.Default.Lock,
-                        title = "Router Encryption",
-                        value = res.securityEncryption,
-                        isSecure = true
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    AuditItemRow(
-                        icon = Icons.Default.Shield,
-                        title = "DNS Leak Protection",
-                        value = if (res.isDnsSecure) "Secured (No Leak)" else "DNS Vulnerable",
-                        isSecure = res.isDnsSecure
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    AuditItemRow(
-                        icon = Icons.Default.Wifi,
-                        title = "Public IP Address",
-                        value = res.publicIp,
-                        isSecure = true
-                    )
+            if (result == null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = DarkCard),
+                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DarkCardBorder))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("No verified Wi-Fi diagnostic available", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("The current repository uses a deterministic simulation rather than querying the active interface.", fontSize = 12.sp, color = TextSecondary)
+                    }
+                }
+            } else {
+                val res = result!!
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = DarkCard),
+                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DarkCardBorder))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        AuditItemRow(Icons.Default.Router, "Wi-Fi Network SSID", res.wifiSsid, CyberCyan)
+                        AuditItemRow(Icons.Default.Lock, "Encryption", res.securityEncryption, CyberGreen)
+                        AuditItemRow(Icons.Default.Shield, "DNS Security", if (res.isDnsSecure) "PASS (simulated)" else "WARNING (simulated)", if (res.isDnsSecure) CyberGreen else CyberOrange)
+                    }
                 }
             }
         }
-    }
-}
-
-@Composable
-fun MetricCard(
-    title: String,
-    value: String,
-    subtitle: String,
-    color: androidx.compose.ui.graphics.Color,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = DarkCard),
-        border = CardDefaults.outlinedCardBorder().copy(
-            brush = androidx.compose.ui.graphics.SolidColor(DarkCardBorder)
-        )
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = title, fontSize = 12.sp, color = TextSecondary)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(text = value, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = color)
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(text = subtitle, fontSize = 11.sp, color = TextMuted)
-        }
-    }
-}
-
-@Composable
-fun AuditItemRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    value: String,
-    isSecure: Boolean
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(if (isSecure) CyberGreen.copy(alpha = 0.15f) else CyberOrange.copy(alpha = 0.15f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = if (isSecure) CyberGreen else CyberOrange,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, fontSize = 12.sp, color = TextSecondary)
-            Text(text = value, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-        }
-        Icon(
-            imageVector = Icons.Default.CheckCircle,
-            contentDescription = null,
-            tint = if (isSecure) CyberGreen else CyberOrange,
-            modifier = Modifier.size(18.dp)
-        )
     }
 }
