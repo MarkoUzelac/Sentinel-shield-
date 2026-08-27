@@ -1,9 +1,6 @@
 package com.example.vpn
 
-/**
- * Runtime configuration required by a real WireGuard backend.
- * No private key is stored in the repository; provisioning must inject it securely at runtime.
- */
+/** Runtime configuration for a real WireGuard peer. */
 data class WireGuardTunnelConfig(
     val interfacePrivateKey: String,
     val interfaceAddress: String,
@@ -17,7 +14,10 @@ data class WireGuardTunnelConfig(
     fun isComplete(): Boolean =
         interfacePrivateKey.isNotBlank() &&
             interfaceAddress.isNotBlank() &&
+            dnsServer.isNotBlank() &&
             peerPublicKey.isNotBlank() &&
             peerEndpointHost.isNotBlank() &&
-            peerEndpointPort in 1..65535
+            peerEndpointPort in 1..65535 &&
+            allowedIps.isNotEmpty() &&
+            persistentKeepaliveSeconds in 0..65535
 }
