@@ -33,8 +33,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
-import androidx.compose.material3.TabRowDefaults
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -66,16 +64,21 @@ fun AiScannerScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
         TabRow(
             selectedTabIndex = selectedTab,
             containerColor = DarkCard,
-            contentColor = CyberCyan,
-            indicator = { tabPositions ->
-                TabRowDefaults.SecondaryIndicator(modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]), color = CyberCyan)
-            }
+            contentColor = CyberCyan
         ) {
             Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = {
-                Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Psychology, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("AI Threat Audit", fontWeight = FontWeight.Bold) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Psychology, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("AI Threat Audit", fontWeight = FontWeight.Bold)
+                }
             }, modifier = Modifier.testTag("tab_ai_threat_audit"))
             Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = {
-                Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Sentinel AI Advisor", fontWeight = FontWeight.Bold) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Sentinel AI Advisor", fontWeight = FontWeight.Bold)
+                }
             }, modifier = Modifier.testTag("tab_sentinel_ai_chat"))
         }
         if (selectedTab == 0) ThreatScannerTab(viewModel) else SentinelAiChatTab(viewModel)
