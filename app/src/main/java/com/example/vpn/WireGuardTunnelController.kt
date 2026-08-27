@@ -12,12 +12,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Coordinates Android VPN consent, the real WireGuard backend and fail-closed health verification. */
 class WireGuardTunnelController(
     private val context: Context,
     private val transport: WireGuardTransport = GoWireGuardTransport(context),
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main.immediate)
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main.immediate),
+    private val invariants: List<WireGuardInvariant> = WireGuardInvariants.registry
 ) {
     private val _state = MutableStateFlow<WireGuardTunnelState>(WireGuardTunnelState.Disconnected)
     val state: StateFlow<WireGuardTunnelState> = _state.asStateFlow()
@@ -27,17 +29,17 @@ class WireGuardTunnelController(
 
     fun markAwaitingConsent() {
         lifecycleJob?.cancel()
-        _state.value = WireGuardTunnelState.AwaitingUserConsent
+        transition(WireGuardTunnelState.AwaitingUserConsent)
     }
 
     fun beginVerification(config: Config) {
         lifecycleJob?.cancel()
         lifecycleJob = scope.launch(Dispatchers.IO) {
-            _state.value = WireGuardTunnelState.Starting
+            transition(WireGuardTunnelState.Starting)
             when (val result = transport.start(config)) {
                 WireGuardTransportResult.Started -> verifyHandshake()
-                is WireGuardTransportResult.Failure -> _state.value = WireGuardTunnelState.Error(result.message)
-                WireGuardTransportResult.Stopped -> _state.value = WireGuardTunnelState.Disconnected
+                is WireGuardTransportResult.Failure -> transition(WireGuardTunnelState.Error(result.message))
+                WireGuardTransportResult.Stopped -> transition(WireGuardTunnelState.Disconnected)
             }
         }
     }
@@ -46,13 +48,13 @@ class WireGuardTunnelController(
         val verificationStarted = System.currentTimeMillis()
         repeat(20) { index ->
             val attempt = index + 1
-            _state.value = WireGuardTunnelState.Verifying(attempt)
+            transition(WireGuardTunnelState.Verifying(attempt))
             val handshake = transport.latestHandshakeEpochMillis()
             val isFresh = handshake != null &&
                 handshake >= verificationStarted - HANDSHAKE_CLOCK_SKEW_MS &&
                 handshake <= System.currentTimeMillis() + HANDSHAKE_CLOCK_SKEW_MS
             if (transport.isTunnelUp() && isFresh) {
-                _state.value = WireGuardTunnelState.Connected(handshake / 1000L)
+                transition(WireGuardTunnelState.Connected(handshake / 1000L))
                 monitorTunnelHealth()
                 return
             }
@@ -74,31 +76,43 @@ class WireGuardTunnelController(
                 failClosed("WireGuard transport or handshake became unhealthy; tunnel was stopped for safety")
                 return
             }
-            _state.value = WireGuardTunnelState.Connected(handshake!! / 1000L)
+            transition(WireGuardTunnelState.Connected(handshake!! / 1000L))
         }
+    }
+
+    private fun transition(next: WireGuardTunnelState) {
+        val previous = _state.value
+        WireGuardInvariants.check(previous, next, invariants)
+        _state.value = next
     }
 
     private fun failClosed(message: String) {
         lifecycleJob?.cancel()
         lifecycleJob = scope.launch(Dispatchers.IO) {
-            transport.stop()
-            _state.value = WireGuardTunnelState.Error(message)
+            withContext(kotlinx.coroutines.NonCancellable) {
+                transport.stop()
+            }
+            transition(WireGuardTunnelState.Error(message))
         }
     }
 
     fun stop() {
         lifecycleJob?.cancel()
         lifecycleJob = scope.launch(Dispatchers.IO) {
-            transport.stop()
-            _state.value = WireGuardTunnelState.Disconnected
+            withContext(kotlinx.coroutines.NonCancellable) {
+                transport.stop()
+            }
+            transition(WireGuardTunnelState.Disconnected)
         }
     }
 
     fun markError(message: String) {
         lifecycleJob?.cancel()
         lifecycleJob = scope.launch(Dispatchers.IO) {
-            transport.stop()
-            _state.value = WireGuardTunnelState.Error(message)
+            withContext(kotlinx.coroutines.NonCancellable) {
+                transport.stop()
+            }
+            transition(WireGuardTunnelState.Error(message))
         }
     }
 
