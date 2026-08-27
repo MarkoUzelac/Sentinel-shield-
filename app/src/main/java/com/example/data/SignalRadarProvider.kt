@@ -11,6 +11,8 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 import com.example.data.model.DeviceLocationState
+import com.example.data.model.EvidenceClock
+import com.example.data.model.SignalIntelligenceEngine
 import com.example.data.model.SignalKind
 import com.example.data.model.SignalRadarItem
 import com.example.data.model.SignalRadarSnapshot
@@ -42,11 +44,15 @@ class SignalRadarProvider(
     private val context: Context,
     private val locationProvider: DeviceLocationProvider,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default),
-    private val openCellIdProvider: OpenCellIdProvider = OpenCellIdProvider()
+    private val openCellIdProvider: OpenCellIdProvider = OpenCellIdProvider(),
+    private val evidenceClock: EvidenceClock = EvidenceClock.SYSTEM
 ) {
     private val _snapshot = MutableStateFlow(SignalRadarSnapshot())
     val snapshot: StateFlow<SignalRadarSnapshot> = _snapshot.asStateFlow()
+
     private val bleDevices = ConcurrentHashMap<String, SignalRadarItem>()
+    private val cellDevices = ConcurrentHashMap<String, SignalRadarItem>()
+    private val intelligence = SignalIntelligenceEngine(evidenceClock)
     private val scanner: BluetoothLeScanner? get() = bluetoothAdapter?.bluetoothLeScanner
     private val bluetoothAdapter: BluetoothAdapter? =
         (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
@@ -56,12 +62,15 @@ class SignalRadarProvider(
 
     private val bleCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
+            val now = evidenceClock.nowEpochMillis()
             val rssi = result.rssi
             val name = runCatching { result.device.name }.getOrNull().orEmpty().ifBlank { "BLE uređaj" }
             val stableId = stableHash(result.device.address)
+            val id = "ble_$stableId"
+            val previous = bleDevices[id]
             val distance = estimateDistanceMeters(rssi, result.txPower)
-            bleDevices[stableId] = SignalRadarItem(
-                id = "ble_$stableId",
+            val base = SignalRadarItem(
+                id = id,
                 kind = SignalKind.BLE,
                 label = "BLE-$stableId",
                 technology = if (name.contains("beacon", true)) "BLE beacon" else "Bluetooth LE",
@@ -69,8 +78,33 @@ class SignalRadarProvider(
                 estimatedDistanceMeters = distance,
                 risk = riskFromBle(rssi, name),
                 explanation = "Pasivno očitan BLE oglas; identitet osobe ili uređaja nije utvrđen.",
-                observedAtEpochMs = System.currentTimeMillis(),
-                runtimeBacked = true
+                observedAtEpochMs = now,
+                runtimeBacked = true,
+                firstObservedAtEpochMs = previous?.firstObservedAtEpochMs ?: now,
+                observationCount = (previous?.observationCount ?: 0) + 1,
+                minRssiDbm = minOf(previous?.minRssiDbm ?: rssi, rssi),
+                maxRssiDbm = maxOf(previous?.maxRssiDbm ?: rssi, rssi)
+            )
+            val history = SignalIntelligenceEngine.ObservationHistory(
+                firstSeenEpochMs = base.firstObservedAtEpochMs,
+                lastSeenEpochMs = now,
+                observationCount = base.observationCount,
+                minRssiDbm = base.minRssiDbm,
+                maxRssiDbm = base.maxRssiDbm,
+                previousRssiDbm = previous?.rssiDbm
+            )
+            val assessment = intelligence.assess(
+                base,
+                history,
+                locationProvider.state.value.latitude,
+                locationProvider.state.value.longitude
+            )
+            bleDevices[id] = base.copy(
+                risk = assessment.risk,
+                rssiTrendDbm = assessment.rssiTrendDbm,
+                persistenceSeconds = assessment.persistenceSeconds,
+                anomalyScore = assessment.anomalyScore,
+                locationConsistency = assessment.locationConsistency.name
             )
             publish()
         }
@@ -79,7 +113,7 @@ class SignalRadarProvider(
             _snapshot.value = _snapshot.value.copy(
                 scanning = false,
                 error = "BLE skeniranje nije uspjelo (kod $errorCode).",
-                lastUpdatedEpochMs = System.currentTimeMillis()
+                lastUpdatedEpochMs = evidenceClock.nowEpochMillis()
             )
         }
     }
@@ -105,7 +139,7 @@ class SignalRadarProvider(
         refreshJob?.cancel()
         refreshJob = null
         runCatching { if (hasBlePermission()) scanner?.stopScan(bleCallback) }
-        _snapshot.value = _snapshot.value.copy(scanning = false, lastUpdatedEpochMs = System.currentTimeMillis())
+        _snapshot.value = _snapshot.value.copy(scanning = false, lastUpdatedEpochMs = evidenceClock.nowEpochMillis())
     }
 
     private fun startBleScan() {
@@ -129,13 +163,38 @@ class SignalRadarProvider(
                     cellId = item.cellId,
                     radio = item.technology.toOpenCellIdRadio()
                 )
-                if (tower == null) item else item.copy(
+                val enriched = if (tower == null) item else item.copy(
                     latitude = tower.latitude,
                     longitude = tower.longitude,
                     locationSource = tower.source,
                     locationAccuracyMeters = tower.rangeMeters,
                     explanation = "Stvarna ćelija očitana kroz TelephonyManager; lokacija tornja dohvaćena iz OpenCellID-a (${tower.samples} uzoraka)."
                 )
+                val previous = cellDevices[item.id]
+                val now = evidenceClock.nowEpochMillis()
+                val base = enriched.copy(
+                    observedAtEpochMs = now,
+                    firstObservedAtEpochMs = previous?.firstObservedAtEpochMs ?: now,
+                    observationCount = (previous?.observationCount ?: 0) + 1,
+                    minRssiDbm = minOf(previous?.minRssiDbm ?: (enriched.rssiDbm ?: 0), enriched.rssiDbm ?: (previous?.minRssiDbm ?: 0)),
+                    maxRssiDbm = maxOf(previous?.maxRssiDbm ?: (enriched.rssiDbm ?: 0), enriched.rssiDbm ?: (previous?.maxRssiDbm ?: 0))
+                )
+                val history = SignalIntelligenceEngine.ObservationHistory(
+                    firstSeenEpochMs = base.firstObservedAtEpochMs,
+                    lastSeenEpochMs = now,
+                    observationCount = base.observationCount,
+                    minRssiDbm = base.minRssiDbm,
+                    maxRssiDbm = base.maxRssiDbm,
+                    previousRssiDbm = previous?.rssiDbm
+                )
+                val assessment = intelligence.assess(base, history, deviceLocation.latitude, deviceLocation.longitude)
+                base.copy(
+                    risk = assessment.risk,
+                    rssiTrendDbm = assessment.rssiTrendDbm,
+                    persistenceSeconds = assessment.persistenceSeconds,
+                    anomalyScore = assessment.anomalyScore,
+                    locationConsistency = assessment.locationConsistency.name
+                ).also { cellDevices[item.id] = it }
             }
         _snapshot.value = _snapshot.value.copy(cellularCount = cells.size, signals = mergeSignals(cells))
     }
@@ -143,7 +202,7 @@ class SignalRadarProvider(
     private fun toCellSignal(info: CellInfo, location: DeviceLocationState): SignalRadarItem? {
         val registered = info.isRegistered
         val dbm = info.cellSignalStrength.dbm
-        val (technology, cellId, area, mcc, mnc) = when (info) {
+        val parsed = when (info) {
             is CellInfoLte -> {
                 val id = info.cellIdentity as CellIdentityLte
                 Quad("4G LTE", id.ci.toLong(), id.tac, id.mccString?.toIntOrNull(), id.mncString?.toIntOrNull())
@@ -165,18 +224,18 @@ class SignalRadarProvider(
         }
         val risk = cellularRisk(dbm, registered)
         return SignalRadarItem(
-            id = "cell_${technology}_${cellId}_${area}",
+            id = "cell_${parsed.first}_${parsed.second}_${parsed.third}",
             kind = SignalKind.CELLULAR,
             label = if (registered) "Serving cell" else "Nearby cell",
-            technology = technology,
+            technology = parsed.first,
             rssiDbm = dbm.takeIf { it < 0 },
-            cellId = cellId,
-            areaCode = area,
+            cellId = parsed.second,
+            areaCode = parsed.third,
             signalLevel = info.cellSignalStrength.level,
             latitude = location.latitude,
             longitude = location.longitude,
-            mcc = mcc,
-            mnc = mnc,
+            mcc = parsed.fourth,
+            mnc = parsed.fifth,
             risk = risk,
             explanation = if (registered) "Stvarna registrirana ćelija očitana kroz TelephonyManager." else "Stvarna susjedna ćelija očitana kroz TelephonyManager.",
             runtimeBacked = true
@@ -186,26 +245,29 @@ class SignalRadarProvider(
     private fun mergeSignals(cells: List<SignalRadarItem>): List<SignalRadarItem> {
         val ble = bleDevices.values.toList()
         return (cells + ble)
-            .sortedWith(compareByDescending<SignalRadarItem> { riskWeight(it.risk) }.thenByDescending { it.rssiDbm ?: -999 })
+            .sortedWith(compareByDescending<SignalRadarItem> { it.anomalyScore }
+                .thenByDescending { riskWeight(it.risk) }
+                .thenByDescending { it.rssiDbm ?: -999 })
             .take(80)
     }
 
     private fun pruneBle() {
-        val cutoff = System.currentTimeMillis() - 20_000L
+        val cutoff = evidenceClock.nowEpochMillis() - 20_000L
         bleDevices.entries.removeIf { it.value.observedAtEpochMs < cutoff }
     }
 
     private fun publish() {
-        val cells = _snapshot.value.signals.filter { it.kind == SignalKind.CELLULAR }
+        val cells = cellDevices.values.toList()
         val ble = bleDevices.values.toList()
         val merged = (cells + ble).distinctBy { it.id }
         _snapshot.value = _snapshot.value.copy(
             scanning = scanning,
-            signals = merged,
+            signals = merged.sortedByDescending { it.anomalyScore }.take(80),
             bleCount = ble.size,
             cellularCount = cells.size,
-            anomalyCount = merged.count { it.risk >= SignalRisk.MEDIUM },
-            lastUpdatedEpochMs = System.currentTimeMillis(),
+            anomalyCount = merged.count { it.anomalyScore >= 25 },
+            anomalyScore = merged.maxOfOrNull { it.anomalyScore } ?: 0,
+            lastUpdatedEpochMs = evidenceClock.nowEpochMillis(),
             error = null
         )
     }
