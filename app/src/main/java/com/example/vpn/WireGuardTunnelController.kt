@@ -7,6 +7,7 @@ import com.wireguard.config.Config
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +20,8 @@ class WireGuardTunnelController(
     private val context: Context,
     private val transport: WireGuardTransport = GoWireGuardTransport(context),
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main.immediate),
-    private val invariants: List<WireGuardInvariant> = WireGuardInvariants.registry
+    private val invariants: List<WireGuardInvariant> = WireGuardInvariants.registry,
+    private val journal: WireGuardTransitionJournal = WireGuardTransitionJournal()
 ) {
     private val _state = MutableStateFlow<WireGuardTunnelState>(WireGuardTunnelState.Disconnected)
     val state: StateFlow<WireGuardTunnelState> = _state.asStateFlow()
@@ -83,13 +85,16 @@ class WireGuardTunnelController(
     private fun transition(next: WireGuardTunnelState) {
         val previous = _state.value
         WireGuardInvariants.check(previous, next, invariants)
+        journal.record(previous, next)
         _state.value = next
     }
+
+    fun transitionJournal(): List<WireGuardTransitionRecord> = journal.snapshot()
 
     private fun failClosed(message: String) {
         lifecycleJob?.cancel()
         lifecycleJob = scope.launch(Dispatchers.IO) {
-            withContext(kotlinx.coroutines.NonCancellable) {
+            withContext(NonCancellable) {
                 transport.stop()
             }
             transition(WireGuardTunnelState.Error(message))
@@ -99,7 +104,7 @@ class WireGuardTunnelController(
     fun stop() {
         lifecycleJob?.cancel()
         lifecycleJob = scope.launch(Dispatchers.IO) {
-            withContext(kotlinx.coroutines.NonCancellable) {
+            withContext(NonCancellable) {
                 transport.stop()
             }
             transition(WireGuardTunnelState.Disconnected)
@@ -109,7 +114,7 @@ class WireGuardTunnelController(
     fun markError(message: String) {
         lifecycleJob?.cancel()
         lifecycleJob = scope.launch(Dispatchers.IO) {
-            withContext(kotlinx.coroutines.NonCancellable) {
+            withContext(NonCancellable) {
                 transport.stop()
             }
             transition(WireGuardTunnelState.Error(message))
