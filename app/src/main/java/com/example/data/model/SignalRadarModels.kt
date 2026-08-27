@@ -23,7 +23,15 @@ data class SignalRadarItem(
     val risk: SignalRisk = SignalRisk.INFO,
     val explanation: String,
     val observedAtEpochMs: Long = System.currentTimeMillis(),
-    val runtimeBacked: Boolean = true
+    val runtimeBacked: Boolean = true,
+    val firstObservedAtEpochMs: Long = observedAtEpochMs,
+    val observationCount: Int = 1,
+    val minRssiDbm: Int? = rssiDbm,
+    val maxRssiDbm: Int? = rssiDbm,
+    val rssiTrendDbm: Int? = null,
+    val persistenceSeconds: Long = 0L,
+    val anomalyScore: Int = 0,
+    val locationConsistency: String = "UNKNOWN"
 )
 
 data class SignalRadarSnapshot(
@@ -33,6 +41,7 @@ data class SignalRadarSnapshot(
     val cellularCount: Int = 0,
     val networkCount: Int = 0,
     val anomalyCount: Int = 0,
+    val anomalyScore: Int = 0,
     val startedAtEpochMs: Long = 0L,
     val lastUpdatedEpochMs: Long = 0L,
     val error: String? = null
