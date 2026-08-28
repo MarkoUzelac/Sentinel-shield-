@@ -14,6 +14,8 @@ import kotlinx.coroutines.launch
 class AndroidSignalRepository(
   private val ingestor: AndroidSignalIngestor,
   private val store: ThreatSnapshotStore = ThreatSnapshotStore(),
+  private val history: ObservationHistory? = null,
+  private val enricher: OpenCellIdEnricher? = null,
 ) {
   private val _running = MutableStateFlow(false)
   val running: StateFlow<Boolean> = _running.asStateFlow()
@@ -26,7 +28,17 @@ class AndroidSignalRepository(
     _running.value = true
     job = scope.launch(Dispatchers.IO) {
       while (isActive) {
-        ingestor.collectSnapshot().collect { snapshot -> store.publish(snapshot) }
+        ingestor.collectSnapshot().collect { rawSnapshot ->
+          val enriched = rawSnapshot.observations.map { observation ->
+            if (observation.kind == ObservationKind.CELLULAR && enricher != null) {
+              runCatching { enricher.enrich(observation) }
+                .getOrElse { observation.copy(payload = observation.payload + ("enrichment" to "unavailable_error")) }
+            } else observation
+          }
+          val next = rawSnapshot.copy(observations = enriched)
+          store.publish(next)
+          history?.append(enriched)
+        }
         delay(POLL_INTERVAL_MS)
       }
     }
