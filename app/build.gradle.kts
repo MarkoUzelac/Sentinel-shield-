@@ -41,6 +41,29 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    val keyStorePath = providers.environmentVariable("KEYSTORE_PATH").orNull
+    val keyStorePassword = providers.environmentVariable("KEYSTORE_PASSWORD").orNull
+    val keyAliasValue = providers.environmentVariable("KEY_ALIAS").orNull
+    val keyPasswordValue = providers.environmentVariable("KEY_PASSWORD").orNull
+    val hasReleaseKeystore = listOf(keyStorePath, keyStorePassword, keyAliasValue, keyPasswordValue)
+        .all { !it.isNullOrBlank() }
+
+    if (hasReleaseKeystore) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(requireNotNull(keyStorePath))
+                storePassword = requireNotNull(keyStorePassword)
+                keyAlias = requireNotNull(keyAliasValue)
+                keyPassword = requireNotNull(keyPasswordValue)
+            }
+        }
+        buildTypes {
+            getByName("release") {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+    }
 }
 
 dependencies {
