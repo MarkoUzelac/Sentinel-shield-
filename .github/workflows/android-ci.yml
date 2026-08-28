@@ -33,19 +33,25 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
+      - name: Verify Android project structure
+        run: |
+          test -f settings.gradle.kts || { echo '::error::Missing settings.gradle.kts — Android source is not synchronized into main.'; exit 1; }
+          test -f build.gradle.kts || { echo '::error::Missing root build.gradle.kts — Android source is incomplete.'; exit 1; }
+          test -f app/build.gradle.kts || { echo '::error::Missing app/build.gradle.kts — Android app module is not synchronized into main.'; exit 1; }
+
       - name: Verify Gradle configuration
-        run: ./gradlew tasks --all --stacktrace
+        run: gradle tasks --all --stacktrace
 
       - name: Assemble release
         env:
           RELEASE_SIGNING_REQUIRED: 'false'
-        run: ./gradlew assembleRelease --stacktrace
+        run: gradle assembleRelease --stacktrace
 
       - name: Unit tests
-        run: ./gradlew test --stacktrace
+        run: gradle test --stacktrace
 
       - name: Android lint
-        run: ./gradlew lint --stacktrace
+        run: gradle lint --stacktrace
 
   dependency-security:
     name: Dependency and secret security
