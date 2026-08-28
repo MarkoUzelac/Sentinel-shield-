@@ -2,15 +2,14 @@ package com.example.security
 
 import android.content.Context
 import androidx.room.Database
-import androidx.room.Entity
-import androidx.room.PrimaryKey
-import androidx.room.Room
-import androidx.room.RoomDatabase
-import androidx.room.TypeConverter
 import androidx.room.Dao
+import androidx.room.Entity
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
+import androidx.room.PrimaryKey
 import androidx.room.Query
+import androidx.room.Room
+import androidx.room.RoomDatabase
 
 @Entity(tableName = "security_observations")
 data class ObservationEntity(
@@ -36,8 +35,8 @@ class ObservationConverters {
 
   fun jsonToMap(value: String): Map<String, String> =
     if (value.isBlank()) emptyMap() else value.split('&').associate { part ->
-      val (key, raw) = part.split('=', limit = 2).let { it[0] to it.getOrElse(1) { "" } }
-      unescape(key) to unescape(raw)
+      val pieces = part.split('=', limit = 2)
+      unescape(pieces[0]) to unescape(pieces.getOrElse(1) { "" })
     }
 
   private fun escape(value: String) = java.net.URLEncoder.encode(value, Charsets.UTF_8.name())
