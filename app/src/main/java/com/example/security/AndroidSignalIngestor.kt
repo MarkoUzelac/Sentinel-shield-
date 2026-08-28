@@ -15,6 +15,13 @@ import android.net.NetworkCapabilities
 import android.net.wifi.ScanResult
 import android.net.wifi.WifiManager
 import android.os.Build
+import android.telephony.CellInfo
+import android.telephony.CellInfoCdma
+import android.telephony.CellInfoGsm
+import android.telephony.CellInfoLte
+import android.telephony.CellInfoNr
+import android.telephony.CellInfoTdscdma
+import android.telephony.CellInfoWcdma
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -132,12 +139,12 @@ class AndroidSignalIngestor(
         kind = ObservationKind.CELLULAR,
         observedAtEpochMs = clock.nowEpochMs(),
         source = EvidenceSource.LOCAL_ANDROID,
-        payload = buildMap {
-          put("registered", cell.isRegistered.toString())
-          put("identity_class", cell.cellIdentity.javaClass.simpleName)
-          put("signal_class", cell.cellSignalStrength.javaClass.simpleName)
-          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) put("timestamp_ns", cell.timestampMillis.toString())
-        },
+        payload = cellIdentityPayload(cell) + mapOf(
+          "registered" to cell.isRegistered.toString(),
+          "identity_class" to cell.cellIdentity.javaClass.simpleName,
+          "signal_class" to cell.cellSignalStrength.javaClass.simpleName,
+          "timestamp_ns" to if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) cell.timestampMillis.toString() else "unavailable",
+        ),
       )
     }
   }
@@ -206,10 +213,10 @@ class AndroidSignalIngestor(
   }
 
   private fun transport(caps: NetworkCapabilities): String = when {
+    caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> "VPN"
     caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "WIFI"
     caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "CELLULAR"
     caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ETHERNET"
-    caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> "VPN"
     else -> "OTHER"
   }
 
@@ -221,6 +228,77 @@ class AndroidSignalIngestor(
       source = EvidenceSource.UNAVAILABLE,
       payload = mapOf("reason" to reason),
     )
+
+  private fun cellIdentityPayload(cell: CellInfo): Map<String, String> = buildMap {
+    when (cell) {
+      is CellInfoLte -> {
+        put("radio", "LTE")
+        put("mcc", cell.cellIdentity.mccString.orEmpty())
+        put("mnc", cell.cellIdentity.mncString.orEmpty())
+        put("tac", cell.cellIdentity.tac.toString())
+        put("ci", cell.cellIdentity.ci.toString())
+        put("pci", cell.cellIdentity.pci.toString())
+        put("earfcn", cell.cellIdentity.earfcn.toString())
+        put("rsrp_dbm", cell.cellSignalStrength.rsrp.toString())
+        put("rsrq_db", cell.cellSignalStrength.rsrq.toString())
+        put("rssnr_db", cell.cellSignalStrength.rssnr.toString())
+      }
+      is CellInfoNr -> {
+        put("radio", "NR")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+          val identity = cell.cellIdentity as android.telephony.CellIdentityNr
+          val signal = cell.cellSignalStrength as android.telephony.CellSignalStrengthNr
+          put("mcc", identity.mccString.orEmpty())
+          put("mnc", identity.mncString.orEmpty())
+          put("tac", identity.tac.toString())
+          put("nci", identity.nci.toString())
+          put("pci", identity.pci.toString())
+          put("nrarfcn", identity.nrarfcn.toString())
+          put("ss_rsrp_dbm", signal.ssRsrp.toString())
+          put("ss_rsrq_db", signal.ssRsrq.toString())
+          put("ss_sinr_db", signal.ssSinr.toString())
+        }
+      }
+      is CellInfoGsm -> {
+        put("radio", "GSM")
+        put("mcc", cell.cellIdentity.mccString.orEmpty())
+        put("mnc", cell.cellIdentity.mncString.orEmpty())
+        put("lac", cell.cellIdentity.lac.toString())
+        put("cid", cell.cellIdentity.cid.toString())
+        put("psc", cell.cellIdentity.psc.toString())
+        put("arfcn", cell.cellIdentity.arfcn.toString())
+        put("rssi_dbm", cell.cellSignalStrength.rssi.toString())
+        put("ber", cell.cellSignalStrength.bitErrorRate.toString())
+      }
+      is CellInfoWcdma -> {
+        put("radio", "WCDMA")
+        put("mcc", cell.cellIdentity.mccString.orEmpty())
+        put("mnc", cell.cellIdentity.mncString.orEmpty())
+        put("lac", cell.cellIdentity.lac.toString())
+        put("cid", cell.cellIdentity.cid.toString())
+        put("psc", cell.cellIdentity.psc.toString())
+        put("uarfcn", cell.cellIdentity.uarfcn.toString())
+        put("rscp_dbm", cell.cellSignalStrength.dbm.toString())
+      }
+      is CellInfoCdma -> {
+        put("radio", "CDMA")
+        put("basestation_id", cell.cellIdentity.basestationId.toString())
+        put("network_id", cell.cellIdentity.networkId.toString())
+        put("system_id", cell.cellIdentity.systemId.toString())
+        put("dbm", cell.cellSignalStrength.dbm.toString())
+      }
+      is CellInfoTdscdma -> {
+        put("radio", "TD-SCDMA")
+        put("mcc", cell.cellIdentity.mccString.orEmpty())
+        put("mnc", cell.cellIdentity.mncString.orEmpty())
+        put("lac", cell.cellIdentity.lac.toString())
+        put("cid", cell.cellIdentity.cid.toString())
+        put("cpid", cell.cellIdentity.cpid.toString())
+        put("uarfcn", cell.cellIdentity.uarfcn.toString())
+        put("rscp_dbm", cell.cellSignalStrength.dbm.toString())
+      }
+    }
+  }
 
   @SuppressLint("MissingPermission")
   private fun BleScanResult.toObservation(now: Long): SecurityObservation = SecurityObservation(
