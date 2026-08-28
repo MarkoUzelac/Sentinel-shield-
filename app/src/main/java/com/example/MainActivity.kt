@@ -15,6 +15,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.example.security.AndroidSignalIngestor
 import com.example.security.AndroidSignalRepository
@@ -46,7 +47,7 @@ class MainActivity : ComponentActivity() {
       val points = ThreatSnapshotProjector.tacticalMap(snapshot)
 
       MaterialTheme {
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(androidx.compose.ui.unit.dp(12))) {
+        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
           Text("SENTINEL SHIELD", style = MaterialTheme.typography.headlineMedium)
           Text(if (running) "LIVE EVIDENCE INGEST" else "INGEST STOPPED")
           Text("Threat ${snapshot.highestThreatScore}/100 • Radar ${contacts.size} • Map ${points.size}")
