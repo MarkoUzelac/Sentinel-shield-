@@ -13,15 +13,17 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.example.security.AndroidSignalIngestor
 import com.example.security.AndroidSignalRepository
+import com.example.security.OpenCellIdEnricher
+import com.example.security.ObservationHistory
+import com.example.security.SentinelDatabase
 
 class MainActivity : ComponentActivity() {
   private lateinit var repository: AndroidSignalRepository
@@ -32,7 +34,12 @@ class MainActivity : ComponentActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    repository = AndroidSignalRepository(AndroidSignalIngestor(this))
+    val database = SentinelDatabase.get(this)
+    repository = AndroidSignalRepository(
+      ingestor = AndroidSignalIngestor(this),
+      history = ObservationHistory(database.observationDao()),
+      enricher = OpenCellIdEnricher(),
+    )
 
     setContent {
       val snapshot by repository.snapshot.collectAsState()
@@ -50,6 +57,9 @@ class MainActivity : ComponentActivity() {
           Text("Highest threat: ${snapshot.highestThreatScore}/100")
           snapshot.observations.groupingBy { it.kind }.eachCount().forEach { (kind, count) ->
             Text("$kind: $count")
+          }
+          snapshot.observations.filter { it.kind.name == "CELLULAR" }.take(3).forEach { observation ->
+            Text("CELL ${observation.payload["radio"].orEmpty()} ${observation.payload["mcc"].orEmpty()}/${observation.payload["mnc"].orEmpty()} id=${observation.payload["cid"] ?: observation.payload["ci"] ?: "unavailable"}")
           }
           Button(onClick = { startIngest() }) {
             Text(if (running) "REFRESH INGEST" else "START SENSOR INGEST")
