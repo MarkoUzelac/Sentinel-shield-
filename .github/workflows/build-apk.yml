@@ -1,8 +1,8 @@
-name: Build signed APK
+name: Build APK
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "ci/run-latest-fix"]
   workflow_dispatch:
 
 permissions:
@@ -17,11 +17,10 @@ env:
   GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx3g -Dorg.gradle.daemon=false"
 
 jobs:
-  build-release-apk:
-    name: Build release APK
+  build-debug-apk:
+    name: Build debug APK
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,8 +33,54 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+
+      - name: Restore Android SDK components
+        run: |
+          set -euo pipefail
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-37"
+
+      - name: Build debug APK
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --stacktrace assembleDebug
+
+      - name: Locate debug APK
+        id: apk
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="$(find app/build/outputs/apk -type f -name '*debug*.apk' -print -quit)"
+          test -n "$apk"
+          test -s "$apk"
+          echo "path=$apk" >> "$GITHUB_OUTPUT"
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
         with:
-          cache-read-only: false
+          name: sentinel-shield-debug-apk-${{ github.sha }}
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
+          retention-days: 14
+
+  build-signed-release:
+    name: Build signed release APK
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Restore Android SDK components
         run: |
@@ -78,8 +123,8 @@ jobs:
           chmod +x ./gradlew
           ./gradlew --no-daemon --stacktrace assembleRelease
 
-      - name: Locate APK
-        id: apk
+      - name: Locate release APK
+        id: release_apk
         shell: bash
         run: |
           set -euo pipefail
@@ -90,7 +135,7 @@ jobs:
 
       - name: Verify APK signature
         env:
-          APK_PATH: ${{ steps.apk.outputs.path }}
+          APK_PATH: ${{ steps.release_apk.outputs.path }}
         run: |
           set -euo pipefail
           apksigner_path="$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner -perm -u+x | sort -V | tail -n 1)"
@@ -101,6 +146,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sentinel-shield-release-apk-${{ github.sha }}
-          path: ${{ steps.apk.outputs.path }}
+          path: ${{ steps.release_apk.outputs.path }}
           if-no-files-found: error
           retention-days: 14
