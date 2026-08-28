@@ -1,6 +1,8 @@
 package com.example
 
 import android.Manifest
+import android.content.Context
+import android.net.ConnectivityManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -24,6 +26,7 @@ import com.example.security.AndroidSignalRepository
 import com.example.security.OpenCellIdEnricher
 import com.example.security.ObservationHistory
 import com.example.security.SentinelDatabase
+import com.example.security.ThreatSnapshotProjector
 
 class MainActivity : ComponentActivity() {
   private lateinit var repository: AndroidSignalRepository
@@ -35,15 +38,19 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     val database = SentinelDatabase.get(this)
+    val connectivity = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     repository = AndroidSignalRepository(
       ingestor = AndroidSignalIngestor(this),
       history = ObservationHistory(database.observationDao()),
       enricher = OpenCellIdEnricher(),
+      connectivityManager = connectivity,
     )
 
     setContent {
       val snapshot by repository.snapshot.collectAsState()
       val running by repository.running.collectAsState()
+      val radarContacts = ThreatSnapshotProjector.radar(snapshot, System.currentTimeMillis())
+      val mapPoints = ThreatSnapshotProjector.tacticalMap(snapshot)
 
       MaterialTheme {
         Column(
@@ -54,6 +61,8 @@ class MainActivity : ComponentActivity() {
           Text("SENTINEL SHIELD", style = MaterialTheme.typography.headlineMedium)
           Text(if (running) "LIVE EVIDENCE INGEST" else "INGEST STOPPED")
           Text("Observations: ${snapshot.observations.size}")
+          Text("Radar contacts: ${radarContacts.size}")
+          Text("Map points: ${mapPoints.size}")
           Text("Highest threat: ${snapshot.highestThreatScore}/100")
           snapshot.observations.groupingBy { it.kind }.eachCount().forEach { (kind, count) ->
             Text("$kind: $count")
