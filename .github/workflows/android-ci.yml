@@ -10,8 +10,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-ci-${{ github.ref }}-${{ github.sha }}
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build-and-test:
@@ -21,38 +21,54 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
       - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: '9.3.1'
+          gradle-version: wrapper
+          cache-cleanup: always
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
       - name: Verify Android project structure
         run: |
+          set -euo pipefail
+          test -f gradlew
+          test -f gradle/wrapper/gradle-wrapper.jar
           test -f settings.gradle.kts
           test -f build.gradle.kts
           test -f app/build.gradle.kts
+          chmod +x gradlew
+
       - name: Verify Gradle configuration
-        run: gradle tasks --all --stacktrace
+        run: ./gradlew tasks --all --stacktrace --no-daemon
+
       - name: Assemble release
         env:
           RELEASE_SIGNING_REQUIRED: 'false'
-        run: gradle assembleRelease --stacktrace
+        run: ./gradlew assembleRelease --stacktrace --no-daemon
+
       - name: Unit tests
-        run: gradle test --stacktrace
+        run: ./gradlew test --stacktrace --no-daemon
+
       - name: Android lint
-        run: gradle lint --stacktrace
+        run: ./gradlew lint --stacktrace --no-daemon
+
       - name: Verify release artifact
         shell: bash
         run: |
           set -euo pipefail
-          artifact="$(find app/build/outputs -type f \( -name '*.apk' -o -name '*.aab' \) -print -quit)"
-          test -n "$artifact"
-          test -s "$artifact"
-          echo "Release artifact: $artifact"
+          mapfile -t artifacts < <(find app/build/outputs -type f \( -name '*.apk' -o -name '*.aab' \) -print)
+          test "${#artifacts[@]}" -ge 1
+          for artifact in "${artifacts[@]}"; do
+            test -s "$artifact"
+            echo "Release artifact: $artifact"
+          done
 
   dependency-security:
     name: Dependency and secret security
