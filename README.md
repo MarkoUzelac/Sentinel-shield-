@@ -219,3 +219,109 @@ API keys and provider credentials must never be committed to source control. Ope
 Sentinel Shield 1.0 is ready only when the native Android build is reproducible, Gradle configuration is clean, tests pass, lint/security gates pass, real hardware providers are integrated where supported, Radar/Tactical Map consume live evidence, `ThreatSnapshot` is shared, VPN state is verified from the actual tunnel, production signing is secure, and physical-device validation is complete.
 
 Until then the project remains in **Production Hardening / Release Gate**.
+
+---
+
+## 📋 Implementation backlog — v1.0
+
+This section is the canonical implementation checklist for the remaining work. Items are ordered by release dependency, not by UI priority.
+
+### P0 — Build and release foundation
+
+- [ ] Make `main` reproducible from a clean checkout with the committed Gradle wrapper.
+- [ ] Keep `Verify Gradle configuration → assembleRelease → unit tests → lint → security → production gate` authoritative.
+- [ ] Eliminate all Gradle/version-catalog/plugin blockers; do not solve failures with disabled checks.
+- [ ] Keep CI runs isolated by commit and prevent accidental cancellation of the production gate.
+- [ ] Add release artifact verification (APK/AAB existence, version code/name, manifest sanity, checksum).
+- [ ] Configure production signing from protected CI secrets only.
+- [ ] Create release tag `v1.0.0` only after all release gates are green.
+
+### P0 — Native Android parity
+
+- [ ] Keep Android as the primary product target; retain web code as UX/reference only.
+- [ ] Preserve Dashboard, Radar, Tactical Map, VPN, Call Security, Network Security, AI Scanner, Dark Web, Legal, Vault, localization and side navigation.
+- [ ] Remove or replace demo-only data paths wherever a real Android/provider implementation exists.
+- [ ] Ensure unsupported functions resolve to `UNAVAILABLE`, not synthetic success.
+
+### P0 — Signal ingestion
+
+- [ ] Cellular: serving + neighboring `CellInfo` ingestion with radio type, MCC/MNC, CID/CI, TAC/LAC and signal metrics where Android exposes them.
+- [ ] BLE: real scanner ingestion with advertised identity, manufacturer/service metadata when exposed, RSSI and observation timestamps.
+- [ ] Wi‑Fi: real scan ingestion with SSID/Hidden SSID, BSSID where permitted, frequency/channel, RSSI and security capabilities.
+- [ ] GPS/GNSS: device location, accuracy, altitude, speed, bearing and freshness.
+- [ ] Connectivity: network capability/state changes through Android network APIs.
+- [ ] VPN: real tunnel lifecycle and fresh WireGuard handshake evidence.
+
+### P0 — Correlation and evidence
+
+- [ ] Normalize all inputs into `SecurityObservation` / equivalent canonical models.
+- [ ] Feed all relevant observations into the shared `SignalIntelligenceEngine` / coordinator.
+- [ ] Produce exactly one authoritative `ThreatSnapshot` consumed by Radar, Dashboard and reports.
+- [ ] Preserve provenance for every provider-backed or derived value.
+- [ ] Apply one injectable `EvidenceClock` to all freshness-sensitive security data.
+- [ ] Enforce retention and stale transitions without real-time test waits.
+
+### P1 — Tactical Map and Physical Finder
+
+- [ ] Render only real observations and provider-backed coordinates.
+- [ ] Distinguish `KNOWN LOCATION`, `ESTIMATED ZONE`, `LAST SEEN` and `UNAVAILABLE`.
+- [ ] Store real observation trails based on the phone's own GPS position.
+- [ ] Add RSSI trend / closer-farther guidance for BLE and Wi‑Fi physical finding.
+- [ ] Add signal persistence and heat/search zones derived from actual measurements.
+- [ ] Prevent another device's GPS location from being inferred without an authorized location-sharing mechanism.
+- [ ] Add interactive object details and map actions without fabricating precision.
+
+### P1 — Device Intelligence
+
+- [ ] Identify device class only when supported by advertised metadata, known fingerprints or other defensible evidence.
+- [ ] Expose name/manufacturer/services only when actually available.
+- [ ] Keep private/local identifiers instead of creating unnecessary persistent tracking identifiers.
+- [ ] Show confidence and provenance beside every inferred field.
+
+### P1 — Threat detection
+
+- [ ] Implement explainable heuristic scoring for cell, BLE, Wi‑Fi and network anomalies.
+- [ ] Correlate rapid cell changes with network/VPN changes and location inconsistencies.
+- [ ] Keep anomaly scoring explicitly separate from proof of IMSI catcher, interception or wiretap activity.
+- [ ] Add finding history and state transitions without duplicating `ThreatSnapshot` state.
+
+### P1 — Privacy / Stealth
+
+- [ ] Implement privacy exposure audit.
+- [ ] Show verified VPN/DNS/network protection state.
+- [ ] Add Android permission/location-sharing review.
+- [ ] Add Bluetooth discoverability guidance.
+- [ ] Add public-IP exposure check and supported tracker/telemetry filtering.
+- [ ] Never describe the mode as radio-frequency invisibility.
+
+### P1 — Legal / Contact / licensing
+
+- [ ] Ship `LEGAL.md` with product limitations, privacy/legal notices and supported jurisdictions/references.
+- [ ] Ship `LICENSE` with the exact rights granted by Marko Uzelac; do not use a permissive license unless intentionally chosen by the copyright holder.
+- [ ] Keep copyright notices consistent across Android source, web reference code and release documentation.
+- [ ] Provide a visible official support/contact channel in the production distribution.
+
+### P2 — Validation
+
+- [ ] Add deterministic tests for BLE persistence and RSSI trend calculation.
+- [ ] Add deterministic tests for cell ↔ OpenCellID correlation and location mismatch handling.
+- [ ] Add deterministic tests for `ThreatSnapshot` consistency across Radar and Dashboard.
+- [ ] Add freshness/race tests for VPN, network, cellular, BLE and GPS observations.
+- [ ] Validate on a physical Android device matrix covering supported Android versions and OEM behavior.
+- [ ] Validate permission denial and hardware-unavailable paths.
+- [ ] Produce a final release evidence report before publishing 1.0.
+
+### Definition of done
+
+```text
+ALL P0 ──────────────── ✅
+P1 security/privacy ─── ✅
+P2 validation ───────── ✅
+CI production gate ──── ✅
+Signed artifact ─────── ✅
+Physical device test ── ✅
+
+                 ↓
+
+            SENTINEL SHIELD 1.0
+```
