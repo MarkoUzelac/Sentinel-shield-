@@ -10,6 +10,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import kotlin.math.cos
 import kotlin.math.min
@@ -17,12 +19,14 @@ import kotlin.math.sin
 
 @Composable
 fun RadarView(contacts: List<RadarContact>, modifier: Modifier = Modifier) {
+  val outline = MaterialTheme.colorScheme.outline
+  val primary = MaterialTheme.colorScheme.primary
   Column(modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
     Text("RADAR", style = MaterialTheme.typography.titleMedium)
     Canvas(Modifier.fillMaxSize()) {
       val center = Offset(size.width / 2f, size.height / 2f)
       val radius = min(size.width, size.height) * 0.38f
-      drawCircle(color = MaterialTheme.colorScheme.outline, radius = radius, center = center, style = androidx.compose.ui.graphics.drawscope.Stroke(2f))
+      drawCircle(color = outline, radius = radius, center = center, style = Stroke(2f))
       contacts.take(64).forEachIndexed { index, contact ->
         val angle = index.toDouble() / maxOf(contacts.size, 1) * Math.PI * 2.0
         val factor = when (contact.evidence) {
@@ -33,9 +37,12 @@ fun RadarView(contacts: List<RadarContact>, modifier: Modifier = Modifier) {
           EvidenceState.UNAVAILABLE -> 1f
         }
         drawCircle(
-          color = MaterialTheme.colorScheme.primary,
+          color = primary,
           radius = 6f,
-          center = Offset((center.x + cos(angle) * radius * factor).toFloat(), (center.y + sin(angle) * radius * factor).toFloat()),
+          center = Offset(
+            (center.x + cos(angle) * radius * factor).toFloat(),
+            (center.y + sin(angle) * radius * factor).toFloat(),
+          ),
         )
       }
     }
