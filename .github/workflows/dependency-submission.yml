@@ -15,6 +15,7 @@ jobs:
   dependency-submission:
     name: Submit dependency graph
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -25,13 +26,17 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Gradle 9.3.1
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: "9.3.1"
+          gradle-version: wrapper
+          cache-cleanup: always
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v6
 
       - name: Generate and submit dependency graph
         uses: gradle/actions/dependency-submission@v6
         with:
-          gradle-version: "9.3.1"
+          gradle-version: wrapper
           additional-arguments: "--no-configuration-cache"
