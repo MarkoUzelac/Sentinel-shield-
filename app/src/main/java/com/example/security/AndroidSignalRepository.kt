@@ -1,5 +1,7 @@
 package com.example.security
 
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -16,6 +18,7 @@ class AndroidSignalRepository(
   private val store: ThreatSnapshotStore = ThreatSnapshotStore(),
   private val history: ObservationHistory? = null,
   private val enricher: OpenCellIdEnricher? = null,
+  private val connectivityManager: ConnectivityManager? = null,
 ) {
   private val _running = MutableStateFlow(false)
   val running: StateFlow<Boolean> = _running.asStateFlow()
@@ -35,9 +38,10 @@ class AndroidSignalRepository(
                 .getOrElse { observation.copy(payload = observation.payload + ("enrichment" to "unavailable_error")) }
             } else observation
           }
-          val next = rawSnapshot.copy(observations = enriched)
+          val verified = enrichVpnEvidence(enriched)
+          val next = rawSnapshot.copy(observations = verified)
           store.publish(next)
-          history?.append(enriched)
+          history?.append(verified)
         }
         delay(POLL_INTERVAL_MS)
       }
@@ -48,6 +52,24 @@ class AndroidSignalRepository(
     job?.cancel()
     job = null
     _running.value = false
+  }
+
+  private fun enrichVpnEvidence(observations: List<SecurityObservation>): List<SecurityObservation> {
+    val vpn = observations.firstOrNull { it.kind == ObservationKind.VPN } ?: return observations
+    val active = vpn.payload["active_transport"]?.toBooleanStrictOrNull() == true
+    if (!active || connectivityManager == null) return observations
+
+    val network = connectivityManager.activeNetwork ?: return observations
+    val caps = connectivityManager.getNetworkCapabilities(network) ?: return observations
+    if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return observations
+
+    // Android's public ConnectivityManager APIs expose VPN transport presence but do not expose
+    // WireGuard peer handshake timestamps. Therefore this observation remains ACTIVE_UNVERIFIED.
+    return observations.map { observation ->
+      if (observation.id == vpn.id) observation.copy(
+        payload = observation.payload + ("handshake" to TunnelState.ACTIVE_UNVERIFIED.name),
+      ) else observation
+    }
   }
 
   private companion object {
