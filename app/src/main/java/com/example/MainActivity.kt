@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -15,6 +16,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.example.security.AndroidSignalIngestor
 import com.example.security.AndroidSignalRepository
@@ -46,12 +48,21 @@ class MainActivity : ComponentActivity() {
       val points = ThreatSnapshotProjector.tacticalMap(snapshot)
 
       MaterialTheme {
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(androidx.compose.ui.unit.dp(12))) {
+        Column(
+          Modifier.fillMaxSize().padding(16.dp),
+          verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
           Text("SENTINEL SHIELD", style = MaterialTheme.typography.headlineMedium)
           Text(if (running) "LIVE EVIDENCE INGEST" else "INGEST STOPPED")
           Text("Threat ${snapshot.highestThreatScore}/100 • Radar ${contacts.size} • Map ${points.size}")
-          DashboardScreen(contacts = contacts, mapPoints = points, modifier = Modifier.weight(1f))
-          Button(onClick = { startIngest() }) { Text(if (running) "REFRESH SENSOR INGEST" else "START SENSOR INGEST") }
+          DashboardScreen(
+            contacts = contacts,
+            mapPoints = points,
+            modifier = Modifier.weight(1f),
+          )
+          Button(onClick = { startIngest() }) {
+            Text(if (running) "REFRESH SENSOR INGEST" else "START SENSOR INGEST")
+          }
           DisposableEffect(Unit) { onDispose { repository.stop() } }
         }
       }
