@@ -1,0 +1,52 @@
+name: Evidence Gate
+
+on:
+  push:
+    branches: ["main", "feat/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evidence-gate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Evidence / tests / release compile
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Verify Gradle configuration
+        run: gradle tasks --all --stacktrace
+
+      - name: Unit tests
+        run: gradle test --stacktrace
+
+      - name: Assemble release with signing requirement disabled for CI compilation
+        env:
+          RELEASE_SIGNING_REQUIRED: 'false'
+        run: gradle assembleRelease --stacktrace
+
+      - name: Verify release artifact
+        run: |
+          test -n "$(find app/build/outputs -type f \( -name '*.apk' -o -name '*.aab' \) -print -quit)"
+
+      - name: Android lint
+        run: gradle lint --stacktrace
