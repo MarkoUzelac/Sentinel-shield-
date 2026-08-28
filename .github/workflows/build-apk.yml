@@ -39,8 +39,9 @@ jobs:
 
       - name: Restore Android SDK components
         run: |
-          yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null || true
-          ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-37" "build-tools;35.0.0"
+          set -euo pipefail
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-37"
 
       - name: Validate release-signing secrets
         env:
@@ -73,6 +74,7 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           OPEN_CELL_ID_API_KEY: ${{ secrets.OPEN_CELL_ID_API_KEY }}
         run: |
+          set -euo pipefail
           chmod +x ./gradlew
           ./gradlew --no-daemon --stacktrace assembleRelease
 
@@ -91,8 +93,8 @@ jobs:
           APK_PATH: ${{ steps.apk.outputs.path }}
         run: |
           set -euo pipefail
-          apksigner_path="${ANDROID_HOME}/build-tools/35.0.0/apksigner"
-          test -x "$apksigner_path"
+          apksigner_path="$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner -perm -u+x | sort -V | tail -n 1)"
+          test -n "$apksigner_path"
           "$apksigner_path" verify --verbose "$APK_PATH"
 
       - name: Upload release APK
