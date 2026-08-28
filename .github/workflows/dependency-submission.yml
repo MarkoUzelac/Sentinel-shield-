@@ -1,37 +1,27 @@
-name: Dependency Submission
+name: Dependency Audit
 
 on:
-  push:
-    branches: ["main"]
+  workflow_dispatch:
 
 permissions:
-  contents: write
-
-concurrency:
-  group: dependency-submission-main
-  cancel-in-progress: true
+  contents: read
 
 jobs:
-  dependency-submission:
-    name: Submit dependency graph
+  audit:
+    name: Dependency audit
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-
       - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "17"
-
-      - name: Set up Gradle 9.3.1
+          java-version: '17'
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: "9.3.1"
-
-      - name: Generate and submit dependency graph
-        uses: gradle/actions/dependency-submission@v6
-        with:
-          gradle-version: "9.3.1"
-          additional-arguments: "--no-configuration-cache"
+          gradle-version: '9.3.1'
+      - name: Verify dependency resolution
+        run: gradle dependencies --no-daemon --stacktrace
