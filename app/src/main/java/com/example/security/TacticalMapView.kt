@@ -15,6 +15,7 @@ import kotlin.math.max
 
 @Composable
 fun TacticalMapView(points: List<TacticalMapPoint>, modifier: Modifier = Modifier) {
+  val secondary = MaterialTheme.colorScheme.secondary
   val located = points.filter { it.latitude != null && it.longitude != null }
   Column(modifier.padding(12.dp)) {
     Text("TACTICAL MAP", style = MaterialTheme.typography.titleMedium)
@@ -30,11 +31,7 @@ fun TacticalMapView(points: List<TacticalMapPoint>, modifier: Modifier = Modifie
         located.forEach { point ->
           val x = ((point.longitude!! - minLon) / lonRange * size.width).toFloat()
           val y = ((maxLat - point.latitude!!) / latRange * size.height).toFloat()
-          drawCircle(
-            color = MaterialTheme.colorScheme.secondary,
-            radius = 8f,
-            center = Offset(x, y),
-          )
+          drawCircle(color = secondary, radius = 8f, center = Offset(x, y))
         }
       }
       if (located.isEmpty()) Text("LOCATION EVIDENCE UNAVAILABLE")
