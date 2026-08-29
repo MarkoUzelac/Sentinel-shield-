@@ -17,6 +17,7 @@ import {
   HelpCircle,
   Star,
   CheckCircle2,
+  Cpu,
 } from 'lucide-react';
 
 interface Props {
@@ -54,6 +55,7 @@ export const Navigation: React.FC<Props> = ({
   const drawerMenuItems = [
     { id: 'shield' as ActiveTab, icon: Shield, label: 'Dashboard & Shield' },
     { id: 'radar' as ActiveTab, icon: Radio, label: 'RF & IMSI Radar' },
+    { id: 'telemetry' as ActiveTab, icon: Cpu, label: 'Hardware Telemetry' },
     { id: 'vpn' as ActiveTab, icon: Network, label: 'WireGuard VPN' },
     { id: 'call_sec' as ActiveTab, icon: PhoneCall, label: 'Calls & MMI Audit' },
     { id: 'ai_scanner' as ActiveTab, icon: Sparkles, label: 'AI Threat Scanner' },

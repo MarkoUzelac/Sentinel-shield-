@@ -11,7 +11,8 @@ export interface TacticalCellTower {
   lat: number;
   lon: number;
   signalStrength?: number;
-  status: 'VERIFIED' | 'ROGUE' | 'CRITICAL' | 'SUSPICIOUS';
+  status: 'OBSERVED' | 'VERIFIED' | 'ROGUE' | 'CRITICAL' | 'SUSPICIOUS';
+  isTestEvidence?: boolean;
   range?: number;
 }
 
@@ -358,20 +359,27 @@ export const LeafletTacticalMap: React.FC<LeafletTacticalMapProps> = ({
       });
 
       filteredTowers.forEach((tower) => {
-        const isRogue = tower.status === 'ROGUE' || tower.status === 'CRITICAL';
+        const isRogue = tower.status === 'ROGUE' || tower.status === 'CRITICAL' || tower.status === 'SUSPICIOUS';
         const towerIcon = createTacticalDivIcon('tower', tower.status);
         const towerMarker = L.marker([tower.lat, tower.lon], { icon: towerIcon });
+
+        const headerText = isRogue
+          ? '⚠️ ANOMALOUS BTS TOWER'
+          : tower.status === 'VERIFIED'
+          ? '✓ CRYPTOGRAPHICALLY VERIFIED BTS'
+          : '📡 OBSERVED SERVING CELL';
 
         const towerPopupHtml = `
           <div class="p-2 bg-neutral-950 text-neutral-100 rounded-lg border border-neutral-800 text-xs font-mono">
             <div class="font-bold mb-1 ${isRogue ? 'text-red-400' : 'text-emerald-400'}">
-              ${isRogue ? '⚠️ ANOMALOUS BTS TOWER' : '✓ VERIFIED CARRIER TOWER'}
+              ${tower.isTestEvidence ? '[TEST EVIDENCE] ' : ''}${headerText}
             </div>
             <div class="text-[11px] text-neutral-300 space-y-0.5">
               <div>OPERATOR: ${tower.operator || 'UNKNOWN'}</div>
               <div>RAT: ${tower.type || 'LTE'}</div>
               <div>CID: ${tower.cellId || tower.id}</div>
               <div>POWER: ${tower.signalStrength ? `${tower.signalStrength} dBm` : 'N/A'}</div>
+              <div>EVIDENCE: ${tower.isTestEvidence ? 'Synthetic Sandbox Test' : 'Network-Provided Telemetry'}</div>
               <div>STATUS: ${tower.status}</div>
             </div>
           </div>

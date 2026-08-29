@@ -1,9 +1,16 @@
 import {
+  AnomalyAssessment,
+  AnomalyFactor,
+  BasebandTelemetryState,
   CapabilityEvidence,
+  CapabilityState,
   DeviceLocationState,
   EvidenceFreshness,
   GeolocationPermissionState,
+  HardwareTelemetryState,
   NetworkObservation,
+  RadarState,
+  RogueCellAssessment,
   SignalRadarItem,
   SignalRadarSnapshot,
   ThreatItem,
@@ -15,10 +22,132 @@ import { IEvidenceClock, SystemEvidenceClock } from './clock';
 import { CapabilityEvidenceEngine } from './evidenceEngine';
 import { VPN_SERVERS } from '../data/jurisdictions';
 import { AuditLogger } from './auditLogger';
+import { AndroidBridgeService } from './androidBridge';
+import { RogueCellIndicatorEngine } from './rogueCellIndicatorEngine';
 
 const HANDSHAKE_TTL_MS = 3 * 60 * 1000; // 3 minutes
 const LOCATION_FRESHNESS_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const RADAR_FRESHNESS_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+export function computeAnomalyAssessment(
+  signals: SignalRadarItem[],
+  isTestMode: boolean
+): AnomalyAssessment {
+  if (!signals || signals.length === 0) {
+    return {
+      score: 0,
+      confidence: 'LOW',
+      riskLevel: 'LOW',
+      factors: [],
+      summary: 'No active RF contacts present. Anomaly risk assessment is idle.',
+    };
+  }
+
+  const factors: AnomalyFactor[] = [];
+
+  // Factor 1: Cellular Serving Cell & TAC Consistency
+  const cellularSignals = signals.filter((s) => s.kind === 'CELLULAR');
+  if (cellularSignals.length > 0) {
+    const hasRogue = cellularSignals.some((s) => s.risk === 'HIGH' || s.risk === 'CRITICAL');
+    const contribution = hasRogue ? 35 : 4;
+    factors.push({
+      name: 'Cellular Base Station Consistency',
+      weight: 35,
+      contribution,
+      observedValue: hasRogue
+        ? 'Unrecognized TAC/CID delta without public database match'
+        : 'Standard serving cell parameters (CID & TAC within expected operator allocation)',
+      expectedBaseline: 'Consistent PLMN / LAC / TAC without forced downgrade',
+      explanation: hasRogue
+        ? 'Cell tower broadcast parameters deviate from expected operator baseline.'
+        : 'Serving cell LAC/TAC match standard regional configuration without forced 2G downgrade.',
+    });
+  }
+
+  // Factor 2: BLE Proximity & Persistence
+  const bleSignals = signals.filter((s) => s.kind === 'BLE');
+  if (bleSignals.length > 0) {
+    const highPersistenceBle = bleSignals.filter(
+      (s) => (s.persistenceSeconds && s.persistenceSeconds > 600) || s.observationCount > 20
+    );
+    const contribution = highPersistenceBle.length > 0 ? (isTestMode ? 32 : 28) : 6;
+    factors.push({
+      name: 'Bluetooth Proximity Persistence',
+      weight: 35,
+      contribution,
+      observedValue:
+        highPersistenceBle.length > 0
+          ? `${highPersistenceBle.length} beacon address(es) observed persistently over multiple scan cycles`
+          : 'Transient low-persistence peripheral advertising frames',
+      expectedBaseline: 'Transient peripheral frames with intermittent visibility',
+      explanation:
+        highPersistenceBle.length > 0
+          ? 'Unregistered beacon addresses observed persistently over extended time window.'
+          : 'Observed BLE frames exhibit normal transient advertising characteristics.',
+    });
+  }
+
+  // Factor 3: Signal Volatility / RSSI Deviation
+  const suspiciousRssi = signals.some(
+    (s) => (s.rssiTrendDbm && Math.abs(s.rssiTrendDbm) > 10) || s.anomalyScore > 60
+  );
+  const rssiContribution = suspiciousRssi ? 18 : 3;
+  factors.push({
+    name: 'RF Propagation & Power Variance',
+    weight: 30,
+    contribution: rssiContribution,
+    observedValue: suspiciousRssi
+      ? 'Elevated RSSI / abnormal signal variance relative to distance baseline'
+      : 'Nominal attenuation within expected propagation margin',
+    expectedBaseline: 'Standard path loss model without power anomalies',
+    explanation: suspiciousRssi
+      ? 'Signal strength indicates abnormal close proximity or transmitter power fluctuations.'
+      : 'Radio frequency power levels fall within standard expected propagation limits.',
+  });
+
+  const totalScore = Math.min(100, Math.max(0, factors.reduce((sum, f) => sum + f.contribution, 0)));
+  const riskLevel =
+    totalScore >= 70 ? 'CRITICAL' : totalScore >= 45 ? 'HIGH' : totalScore >= 20 ? 'MEDIUM' : 'LOW';
+  const confidence = isTestMode ? 'ESTIMATED' : signals.length >= 3 ? 'HIGH' : 'MEDIUM';
+
+  const summary = isTestMode
+    ? `Test evidence assessment: Aggregate score ${totalScore}/100 computed from ${factors.length} isolated test factors.`
+    : `Live telemetry assessment: Aggregate score ${totalScore}/100 computed across ${factors.length} verified observation factors.`;
+
+  return {
+    score: totalScore,
+    confidence,
+    riskLevel,
+    factors,
+    summary,
+  };
+}
+
+export function computeCapabilityState(
+  isTestMode: boolean,
+  signals: SignalRadarItem[],
+  locationPermState: GeolocationPermissionState
+): { state: CapabilityState; message: string } {
+  if (isTestMode) {
+    return {
+      state: 'TEST_EVIDENCE',
+      message: 'Isolated test evidence dataset loaded for sandbox verification. Not live hardware telemetry.',
+    };
+  }
+
+  if (locationPermState === 'DENIED' || locationPermState === 'PERMANENTLY_DENIED') {
+    return {
+      state: 'PERMISSION_REQUIRED',
+      message: 'Location & sensor permission required for spatial proximity analysis.',
+    };
+  }
+
+  // In browser/PWA environment, cellular baseband scanning hardware is not accessible
+  return {
+    state: 'UNAVAILABLE',
+    message: 'RF hardware sweep unavailable in browser — native Android capability required',
+  };
+}
 
 export class ThreatSnapshotEngine {
   private static clock: IEvidenceClock = new SystemEvidenceClock();
@@ -40,6 +169,7 @@ export class ThreatSnapshotEngine {
 
   private static radarSignals: SignalRadarItem[] = [];
   private static isScanning = false;
+  private static isTestMode = false;
 
   private static vpnState: VpnEvidenceState = {
     tunnelState: 'Disconnected',
@@ -210,17 +340,104 @@ export class ThreatSnapshotEngine {
       radarFreshness = now - latestObserved > RADAR_FRESHNESS_TTL_MS ? 'STALE' : 'VERIFIED';
     }
 
+    const anomalyAssessment = computeAnomalyAssessment(this.radarSignals, this.isTestMode);
+    const { state: capabilityState, message: capabilityStateMessage } = computeCapabilityState(
+      this.isTestMode,
+      this.radarSignals,
+      this.location.permissionState
+    );
+
+    const isNativeBridge = AndroidBridgeService.isNativeBridgeAvailable();
+    const baseband: BasebandTelemetryState = AndroidBridgeService.getBasebandState(this.isTestMode);
+    const rogueCellAssessment: RogueCellAssessment = RogueCellIndicatorEngine.evaluate(
+      this.radarSignals,
+      baseband,
+      this.isTestMode
+    );
+
+    let radarState: RadarState = 'UNAVAILABLE';
+    if (this.isTestMode) {
+      radarState = 'TEST_DATA';
+    } else if (this.location.permissionState === 'DENIED' || this.location.permissionState === 'PERMANENTLY_DENIED') {
+      radarState = 'PERMISSION_REQUIRED';
+    } else if (this.isScanning) {
+      radarState = 'SCANNING';
+    } else if (this.radarSignals.length > 0) {
+      radarState = isNativeBridge ? 'LIVE_DATA' : 'PARTIAL_DATA';
+    } else if (isNativeBridge) {
+      radarState = 'NO_DATA';
+    } else {
+      radarState = 'UNAVAILABLE';
+    }
+
+    const hardwareTelemetry: HardwareTelemetryState = {
+      cellular: {
+        status: this.isTestMode ? 'TEST' : isNativeBridge ? 'LIVE' : 'UNAVAILABLE',
+        label: 'Cellular Baseband Telemetry',
+        source: this.isTestMode
+          ? 'Isolated Test Sandbox'
+          : isNativeBridge
+          ? 'Android TelephonyManager (L1/RRC)'
+          : 'Unavailable in Web Browser',
+        details: this.isTestMode
+          ? 'Synthetic carrier tower baseline records loaded.'
+          : isNativeBridge
+          ? 'Direct modem carrier data stream active.'
+          : 'Direct baseband modem sweeping is restricted in web sandboxes.',
+        limitations: 'Web browsers cannot execute raw AT-commands or inspect L1 PHY modem frames without native Android privileges.',
+        isLive: isNativeBridge,
+      },
+      ble: {
+        status: this.isTestMode ? 'TEST' : typeof navigator !== 'undefined' && (navigator as any).bluetooth ? 'INFERRED' : 'UNAVAILABLE',
+        label: 'Bluetooth Low Energy (BLE)',
+        source: this.isTestMode ? 'Synthetic BLE Test Suite' : 'Web Bluetooth API (Pairing Mode Only)',
+        details: this.isTestMode
+          ? 'Synthetic BLE beacon profiles loaded.'
+          : 'Web Bluetooth requires manual pairing; background promiscuous sweeps are restricted.',
+        limitations: 'Web Bluetooth requires explicit user pairing per device; background raw RF sweeping is prohibited by browser security sandbox.',
+        isLive: false,
+      },
+      location: {
+        status: this.location.hasFix ? 'LIVE' : this.location.permissionState === 'DENIED' ? 'PERMISSION_REQUIRED' : this.isTestMode ? 'TEST' : 'PERMISSION_REQUIRED',
+        label: 'Spatial Coordinates (GPS/GNSS)',
+        source: this.location.hasFix ? 'Browser Geolocation API (Fused GNSS/Wi-Fi)' : 'Geolocation Sensor Access',
+        details: this.location.hasFix
+          ? (this.location.accuracyMeters ? `Accurate to ~${Math.round(this.location.accuracyMeters)}m.` : 'Live position fix acquired.')
+          : 'Geolocation permission needed for local spatial proximity calculations.',
+        limitations: 'Requires user permission prompt; accuracy depends on hardware GNSS receiver and OS fused location provider.',
+        isLive: this.location.hasFix,
+      },
+      nativeRf: {
+        status: this.isTestMode ? 'TEST' : isNativeBridge ? 'LIVE' : 'UNAVAILABLE',
+        label: 'Native RF / Baseband Bridge',
+        source: isNativeBridge ? 'Android TelephonyManager Bridge' : 'None (Browser Sandboxed)',
+        details: isNativeBridge
+          ? 'Connected to privileged Android host runtime.'
+          : 'No privileged Android bridge detected in current execution window.',
+        limitations: 'Privileged baseband access requires Sentinel Shield Pro native Android APK.',
+        isLive: isNativeBridge,
+      },
+    };
+
     const radarSnapshot: SignalRadarSnapshot = {
       scanning: this.isScanning,
+      radarState,
+      capabilityState,
+      capabilityStateMessage,
       signals: this.radarSignals,
+      baseband,
+      rogueCellAssessment,
+      hardwareTelemetry,
       bleCount,
       cellularCount,
       networkCount,
       anomalyCount: anomalies.length,
-      anomalyScore: anomalies.length > 0 ? 65 : this.radarSignals.length > 0 ? 12 : 0,
+      anomalyAssessment,
+      anomalyScore: anomalyAssessment.score,
       startedAtEpochMs: this.isScanning ? now - 10000 : 0,
       lastUpdatedEpochMs: now,
       freshness: radarFreshness,
+      isTestMode: this.isTestMode,
       error: null,
     };
 
@@ -364,8 +581,14 @@ export class ThreatSnapshotEngine {
     this.notify();
   }
 
-  static setSignals(signals: SignalRadarItem[]) {
+  static setTestMode(isTest: boolean) {
+    this.isTestMode = isTest;
+    this.notify();
+  }
+
+  static setSignals(signals: SignalRadarItem[], isTest: boolean = false) {
     this.radarSignals = signals;
+    this.isTestMode = isTest;
     this.notify();
   }
 
@@ -383,6 +606,7 @@ export class ThreatSnapshotEngine {
 
   static clearSignals() {
     this.radarSignals = [];
+    this.isTestMode = false;
     this.notify();
   }
 

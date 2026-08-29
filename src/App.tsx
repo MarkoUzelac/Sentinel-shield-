@@ -17,6 +17,7 @@ import { ipLocationService } from './services/geo';
 import { Navigation } from './components/Navigation';
 import { DashboardView } from './views/DashboardView';
 import { RadarView } from './views/RadarView';
+import { HardwareTelemetryDashboard } from './views/HardwareTelemetryDashboard';
 import { VpnView } from './views/VpnView';
 import { CallSecurityView } from './views/CallSecurityView';
 import { AiScannerView } from './views/AiScannerView';
@@ -150,6 +151,10 @@ const AppContent: React.FC = () => {
 
         {activeTab === 'radar' && (
           <RadarView location={location} skin={skin} />
+        )}
+
+        {activeTab === 'telemetry' && (
+          <HardwareTelemetryDashboard skin={skin} />
         )}
 
         {activeTab === 'vpn' && (

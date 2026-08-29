@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { CapabilityEvidence, ThreatItem, AppSkinConfig, ScanLog } from '../types';
+import { CapabilityEvidence, ThreatItem, AppSkinConfig, ScanLog, HardwareTelemetryState } from '../types';
 import { ShieldGaugeCard } from '../components/ShieldGaugeCard';
 import { CapabilityEvidenceCard } from '../components/CapabilityEvidenceCard';
 import { ThreatAlertCard } from '../components/SecurityItemCards';
+import { HardwareTelemetryCard } from '../components/HardwareTelemetryCard';
+import { ThreatSnapshotEngine } from '../services/threatSnapshotEngine';
 import { Shield, ShieldAlert, Sparkles, Activity, CheckCircle2, ChevronRight, HelpCircle, TrendingUp } from 'lucide-react';
 import { ScanDatabase } from '../services/scanDatabase';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -31,6 +33,16 @@ export const DashboardView: React.FC<Props> = ({
   const [isAuditing, setIsAuditing] = useState(false);
   const [auditStep, setAuditStep] = useState<string | null>(null);
   const [logs, setLogs] = useState<ScanLog[]>([]);
+  const [radarSnapshot, setRadarSnapshot] = useState(
+    () => ThreatSnapshotEngine.getSnapshot().radar
+  );
+
+  useEffect(() => {
+    const unsubscribe = ThreatSnapshotEngine.subscribe((threatSnap) => {
+      setRadarSnapshot(threatSnap.radar);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     setLogs(ScanDatabase.getLogs());
@@ -315,6 +327,17 @@ export const DashboardView: React.FC<Props> = ({
             ))}
           </div>
         </div>
+      )}
+
+      {/* Hardware Telemetry Access & Capabilities */}
+      {radarSnapshot.hardwareTelemetry && (
+        <HardwareTelemetryCard
+          hardwareState={radarSnapshot.hardwareTelemetry}
+          radarState={radarSnapshot.radarState || 'UNAVAILABLE'}
+          isTestMode={radarSnapshot.isTestMode}
+          skin={skin}
+          onNavigateTab={onNavigateTab}
+        />
       )}
 
       {/* Runtime Evidence Matrix */}

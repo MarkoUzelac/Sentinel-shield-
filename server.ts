@@ -535,6 +535,159 @@ User question: ${userMessage}`;
     return res.json({ result: fallbackResult });
   });
 
+  // In-memory cache for OpenCellID queries (30-minute TTL, max 500 items)
+  interface CellCacheEntry {
+    data: unknown;
+    expiresAt: number;
+  }
+  const cellCache = new Map<string, CellCacheEntry>();
+  const CELL_CACHE_TTL_MS = 30 * 60 * 1000;
+
+  function getFromCellCache<T>(key: string): T | null {
+    const entry = cellCache.get(key);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) {
+      cellCache.delete(key);
+      return null;
+    }
+    return entry.data as T;
+  }
+
+  function setInCellCache(key: string, data: unknown): void {
+    if (cellCache.size >= 500) {
+      const oldestKey = cellCache.keys().next().value;
+      if (oldestKey) cellCache.delete(oldestKey);
+    }
+    cellCache.set(key, { data, expiresAt: Date.now() + CELL_CACHE_TTL_MS });
+  }
+
+  // OpenCellID Cell Enrichment & Lookup Endpoint (Backend Proxy)
+  app.get("/api/cell/lookup", async (req: Request, res: Response) => {
+    const mcc = parseInt(String(req.query.mcc || "0"), 10);
+    const mnc = parseInt(String(req.query.mnc || "0"), 10);
+    const lac = parseInt(String(req.query.lac || req.query.tac || "0"), 10);
+    const cellid = parseInt(String(req.query.cid || req.query.cellid || req.query.eci || "0"), 10);
+    const radio = String(req.query.radio || req.query.networkType || "LTE").toUpperCase();
+
+    if (!mcc || !cellid) {
+      return res.status(400).json({
+        ok: false,
+        error: "MCC and Cell ID (CID) are required parameters",
+        unavailable: true,
+        provider: "OpenCellID BACKUP",
+      });
+    }
+
+    const cacheKey = `cell:${mcc}:${mnc}:${lac}:${cellid}:${radio}`;
+    const cached = getFromCellCache<unknown>(cacheKey);
+    if (cached) {
+      return res.json({
+        ok: true,
+        cached: true,
+        provider: "OpenCellID BACKUP",
+        sourceType: "OPENCELLID_BACKUP",
+        data: cached,
+        timestamp: Date.now(),
+      });
+    }
+
+    const apiKey = process.env.OPENCELLID_API_KEY;
+    if (!apiKey || apiKey === "MY_OPENCELLID_API_KEY" || apiKey.trim() === "") {
+      return res.json({
+        ok: false,
+        error: "OpenCellID API key not configured on server (OPENCELLID_API_KEY)",
+        unavailable: true,
+        provider: "OpenCellID BACKUP",
+      });
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+    try {
+      // Standard OpenCellID API endpoint
+      const openCellIdUrl = `https://opencellid.org/cell/get?key=${encodeURIComponent(apiKey)}&mcc=${mcc}&mnc=${mnc}&lac=${lac}&cellid=${cellid}&radio=${encodeURIComponent(radio)}&format=json`;
+
+      const response = await fetch(openCellIdUrl, {
+        method: "GET",
+        headers: {
+          "Accept": "application/json",
+          "User-Agent": "Sentinel-Shield-Pro/2.8.0",
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const rawData = await response.json();
+        if (rawData && (rawData.lat !== undefined || rawData.latitude !== undefined)) {
+          const lat = parseFloat(rawData.lat || rawData.latitude);
+          const lon = parseFloat(rawData.lon || rawData.longitude);
+          const range = parseFloat(rawData.range || "500");
+          const samples = parseInt(rawData.samples || "1", 10);
+          const changeable = Boolean(rawData.changeable);
+
+          const result = {
+            mcc,
+            mnc,
+            lac,
+            cellid,
+            radio,
+            latitude: lat,
+            longitude: lon,
+            rangeMeters: isNaN(range) ? 500 : range,
+            samples,
+            changeable,
+            provider: "OpenCellID BACKUP",
+            sourceType: "OPENCELLID_BACKUP",
+            lookupTimestamp: Date.now(),
+            confidence: samples > 5 ? "HIGH" : "MEDIUM",
+          };
+
+          setInCellCache(cacheKey, result);
+
+          return res.json({
+            ok: true,
+            cached: false,
+            provider: "OpenCellID BACKUP",
+            sourceType: "OPENCELLID_BACKUP",
+            data: result,
+            timestamp: Date.now(),
+          });
+        } else if (rawData && rawData.error) {
+          return res.json({
+            ok: false,
+            error: rawData.error || "Cell not found in OpenCellID database",
+            unavailable: true,
+            provider: "OpenCellID BACKUP",
+          });
+        }
+      }
+    } catch (err) {
+      clearTimeout(timeoutId);
+      console.warn("[OpenCellID Proxy] Lookup request failed:", err);
+    }
+
+    return res.json({
+      ok: false,
+      error: "OpenCellID lookup unavailable",
+      unavailable: true,
+      provider: "OpenCellID BACKUP",
+    });
+  });
+
+  // OpenCellID Health / Capability Check
+  app.get("/api/cell/status", (req: Request, res: Response) => {
+    const hasKey = Boolean(process.env.OPENCELLID_API_KEY && process.env.OPENCELLID_API_KEY !== "MY_OPENCELLID_API_KEY" && process.env.OPENCELLID_API_KEY.trim() !== "");
+    res.json({
+      service: "OpenCellID Backup Provider",
+      configured: hasKey,
+      cachedEntries: cellCache.size,
+      sourceType: "OPENCELLID_BACKUP",
+    });
+  });
+
   // Vite middleware for development vs static build for production
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

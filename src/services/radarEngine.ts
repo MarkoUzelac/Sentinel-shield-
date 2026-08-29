@@ -1,5 +1,6 @@
 import { DeviceLocationState, SignalRadarItem, SignalRadarSnapshot } from '../types';
 import { ThreatSnapshotEngine } from './threatSnapshotEngine';
+import { CellProviderManager } from './cellProvider';
 
 export class SignalRadarEngine {
   private static subscribers: ((snapshot: SignalRadarSnapshot) => void)[] = [];
@@ -51,7 +52,7 @@ export class SignalRadarEngine {
   }
 
   static ingestObservations(signals: SignalRadarItem[]) {
-    ThreatSnapshotEngine.setSignals(signals);
+    ThreatSnapshotEngine.setSignals(signals, false);
   }
 
   static addObservation(signal: SignalRadarItem) {
@@ -63,7 +64,8 @@ export class SignalRadarEngine {
   }
 
   /**
-   * Load real/demonstration baseline observations for explicit testing or sandbox verification.
+   * Load isolated baseline observations for explicit testing and sandbox verification.
+   * Clearly marked as test evidence, never claimed as live hardware telemetry.
    */
   static loadTestEvidence(baseLat?: number | null, baseLng?: number | null) {
     const now = ThreatSnapshotEngine.getClock().now();
@@ -72,7 +74,7 @@ export class SignalRadarEngine {
 
     const sampleSignals: SignalRadarItem[] = [
       {
-        id: 'cell-verified-01',
+        id: 'cell-observed-01',
         kind: 'CELLULAR',
         label: 'Serving Cell (CID 49102 / TAC 1205)',
         technology: 'LTE Band 20 (800 MHz)',
@@ -84,16 +86,24 @@ export class SignalRadarEngine {
         latitude: lat + 0.0015,
         longitude: lng - 0.0018,
         bearingDegrees: 45,
-        locationSource: 'OpenCellID DB',
-        locationAccuracyMeters: 25,
-        locationConfidence: 'KNOWN_LOCATION',
-        freshness: 'VERIFIED',
+        locationSource: 'Isolated Test Baseline Record',
+        sourceType: 'TEST',
+        locationAccuracyMeters: 50,
+        locationConfidence: 'ESTIMATED_ZONE',
+        locationEvidenceType: 'NETWORK_PROVIDED_COORDINATES',
+        freshness: 'ACTIVE_UNVERIFIED',
+        verificationStatus: 'SYNTHETIC_TEST',
+        classification: 'SERVING_CELL',
+        isTestEvidence: true,
+        isSynthetic: true,
+        isLive: false,
         mcc: 219,
         mnc: 1,
+        pci: 142,
         risk: 'INFO',
-        explanation: 'Verified authenticated eNodeB cellular base station.',
+        explanation: 'Synthetic serving cell test record loaded in sandbox.',
         observedAtEpochMs: now,
-        runtimeBacked: true,
+        runtimeBacked: false,
         firstObservedAtEpochMs: now - 3600000,
         observationCount: 120,
         minRssiDbm: -84,
@@ -104,29 +114,76 @@ export class SignalRadarEngine {
         locationConsistency: 'CONSISTENT',
       },
       {
-        id: 'ble-unverified-02',
+        id: 'cell-neighbor-02',
+        kind: 'CELLULAR',
+        label: 'Neighbor Cell (CID 49103 / TAC 1205)',
+        technology: 'LTE Band 3 (1800 MHz)',
+        rssiDbm: -91,
+        estimatedDistanceMeters: 780,
+        cellId: 49103,
+        areaCode: 1205,
+        signalLevel: 2,
+        latitude: lat - 0.0022,
+        longitude: lng + 0.0025,
+        bearingDegrees: 135,
+        locationSource: 'Isolated Test Baseline Record',
+        sourceType: 'TEST',
+        locationAccuracyMeters: 80,
+        locationConfidence: 'ESTIMATED_ZONE',
+        locationEvidenceType: 'NETWORK_PROVIDED_COORDINATES',
+        freshness: 'ACTIVE_UNVERIFIED',
+        verificationStatus: 'SYNTHETIC_TEST',
+        classification: 'NEIGHBOR_CELL',
+        isTestEvidence: true,
+        isSynthetic: true,
+        isLive: false,
+        mcc: 219,
+        mnc: 1,
+        pci: 148,
+        risk: 'INFO',
+        explanation: 'Neighboring cell tower test baseline for handover check.',
+        observedAtEpochMs: now - 60000,
+        runtimeBacked: false,
+        firstObservedAtEpochMs: now - 1800000,
+        observationCount: 35,
+        minRssiDbm: -95,
+        maxRssiDbm: -88,
+        rssiTrendDbm: -1,
+        persistenceSeconds: 1800,
+        anomalyScore: 8,
+        locationConsistency: 'CONSISTENT',
+      },
+      {
+        id: 'ble-observed-03',
         kind: 'BLE',
-        label: 'Persistent BLE Tracker Beacon',
+        label: 'Unregistered BLE Peripheral Beacon',
         technology: 'BLE 5.2 (Adv Ch 37)',
         rssiDbm: -82,
         estimatedDistanceMeters: 6.8,
         risk: 'MEDIUM',
-        explanation: 'Unregistered Bluetooth beacon detected in proximity across multiple location updates.',
+        explanation: 'Unregistered Bluetooth Low Energy beacon detected in proximity across multiple test cycles.',
+        verificationStatus: 'SYNTHETIC_TEST',
+        classification: 'UNREGISTERED_BEACON',
+        locationEvidenceType: 'ESTIMATED_ZONE',
+        locationConfidence: 'ESTIMATED_ZONE',
+        sourceType: 'TEST',
+        isTestEvidence: true,
+        isSynthetic: true,
+        isLive: false,
         observedAtEpochMs: now,
-        runtimeBacked: true,
+        runtimeBacked: false,
         firstObservedAtEpochMs: now - 1800000,
         observationCount: 45,
         minRssiDbm: -89,
         maxRssiDbm: -76,
         rssiTrendDbm: 4,
         persistenceSeconds: 1800,
-        anomalyScore: 68,
-        locationConfidence: 'ESTIMATED_ZONE',
+        anomalyScore: 48,
         freshness: 'ACTIVE_UNVERIFIED',
-        locationConsistency: 'FOLLOWING_DEVICE',
+        locationConsistency: 'OBSERVED_IN_PROXIMITY',
       },
     ];
 
-    ThreatSnapshotEngine.setSignals(sampleSignals);
+    ThreatSnapshotEngine.setSignals(sampleSignals, true);
   }
 }

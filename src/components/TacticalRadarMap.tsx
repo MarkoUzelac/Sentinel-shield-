@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
-import { DeviceLocationState, SignalRadarItem, AppSkinConfig, GeocodingResult } from '../types';
+import { DeviceLocationState, SignalRadarItem, AppSkinConfig, GeocodingResult, CapabilityState } from '../types';
 import {
   Crosshair,
   MapPin,
@@ -22,6 +22,8 @@ import {
   Clock,
   SearchX,
   AlertTriangle,
+  Beaker,
+  Trash2,
 } from 'lucide-react';
 import Map, { Marker, Popup, MapRef } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -35,10 +37,21 @@ interface Props {
   location: DeviceLocationState;
   signals: SignalRadarItem[];
   skin: AppSkinConfig;
+  capabilityState?: CapabilityState;
+  isTestMode?: boolean;
   onSampleLoad?: () => void;
+  onClearSweep?: () => void;
 }
 
-export const TacticalRadarMap: React.FC<Props> = ({ location, signals, skin, onSampleLoad }) => {
+export const TacticalRadarMap: React.FC<Props> = ({
+  location,
+  signals,
+  skin,
+  capabilityState = 'UNAVAILABLE',
+  isTestMode = false,
+  onSampleLoad,
+  onClearSweep,
+}) => {
   const mapRef = useRef<MapRef | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [viewMode, setViewMode] = useState<'LEAFLET_OSM' | 'RADAR' | 'VECTOR_MAP'>('LEAFLET_OSM');
@@ -263,6 +276,7 @@ export const TacticalRadarMap: React.FC<Props> = ({ location, signals, skin, onS
     if (viewMode !== 'RADAR') return;
     let animationFrameId: number;
     let sweepAngle = 0;
+    const isLiveOrTestScanning = isTestMode || capabilityState === 'LIVE_HARDWARE' || capabilityState === 'PARTIAL_HARDWARE';
 
     const render = () => {
       const canvas = canvasRef.current;
@@ -283,11 +297,16 @@ export const TacticalRadarMap: React.FC<Props> = ({ location, signals, skin, onS
       const centerY = height / 2 + 5;
       const maxRadius = Math.min(width, height) * 0.38;
 
-      // Concentric Rings
-      const rings = [0.33, 0.66, 1.0];
-      rings.forEach((ratio, idx) => {
+      // Range ring distance scale labels (50m, 200m, 500m)
+      const rings = [
+        { ratio: 0.33, label: '50m' },
+        { ratio: 0.66, label: '200m' },
+        { ratio: 1.0, label: '500m' },
+      ];
+
+      rings.forEach((ring, idx) => {
         ctx.beginPath();
-        ctx.arc(centerX, centerY, maxRadius * ratio, 0, 2 * Math.PI);
+        ctx.arc(centerX, centerY, maxRadius * ring.ratio, 0, 2 * Math.PI);
         ctx.strokeStyle = idx === 2 ? `${skin.primaryColor}44` : `${skin.primaryColor}22`;
         ctx.lineWidth = idx === 2 ? 1.5 : 1;
         if (idx === 2) {
@@ -299,6 +318,11 @@ export const TacticalRadarMap: React.FC<Props> = ({ location, signals, skin, onS
 
         ctx.fillStyle = `${skin.primaryColor}06`;
         ctx.fill();
+
+        // Ring distance label
+        ctx.fillStyle = `${skin.primaryColor}55`;
+        ctx.font = '8px monospace';
+        ctx.fillText(ring.label, centerX + 4, centerY - maxRadius * ring.ratio + 9);
       });
       ctx.setLineDash([]);
 
@@ -312,29 +336,33 @@ export const TacticalRadarMap: React.FC<Props> = ({ location, signals, skin, onS
       ctx.lineWidth = 1;
       ctx.stroke();
 
-      // Sweeping beam
-      ctx.save();
-      ctx.translate(centerX, centerY);
-      ctx.rotate(sweepAngle);
+      // Sweeping beam (Active in test mode or live hardware scanning, static grid otherwise)
+      if (isLiveOrTestScanning) {
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(sweepAngle);
 
-      const gradient = ctx.createLinearGradient(0, 0, maxRadius, 0);
-      gradient.addColorStop(0, `${skin.primaryColor}44`);
-      gradient.addColorStop(1, `${skin.primaryColor}00`);
+        const beamColor = isTestMode ? '#A855F7' : skin.primaryColor;
 
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.arc(0, 0, maxRadius, 0, 0.45);
-      ctx.fillStyle = `${skin.primaryColor}18`;
-      ctx.fill();
+        const gradient = ctx.createLinearGradient(0, 0, maxRadius, 0);
+        gradient.addColorStop(0, `${beamColor}44`);
+        gradient.addColorStop(1, `${beamColor}00`);
 
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(maxRadius, 0);
-      ctx.strokeStyle = `${skin.primaryColor}99`;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, maxRadius, 0, 0.45);
+        ctx.fillStyle = `${beamColor}18`;
+        ctx.fill();
 
-      ctx.restore();
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(maxRadius, 0);
+        ctx.strokeStyle = `${beamColor}99`;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.restore();
+      }
 
       // Draw Center / GPS Fix
       if (location.hasFix) {
@@ -350,9 +378,9 @@ export const TacticalRadarMap: React.FC<Props> = ({ location, signals, skin, onS
         ctx.stroke();
       }
 
-      // Draw Real Signal blips (only evidence-backed)
+      // Draw Signal blips (strictly evidence-backed)
       signals.forEach((sig, index) => {
-        const angle = (index * (Math.PI / 3.2)) + 0.3;
+        const angle = index * (Math.PI / 3.2) + 0.3;
         let distanceRatio = 0.4;
         if (sig.kind === 'BLE') {
           distanceRatio = Math.min(0.9, Math.max(0.2, (sig.estimatedDistanceMeters || 5) / 15));
@@ -368,6 +396,8 @@ export const TacticalRadarMap: React.FC<Props> = ({ location, signals, skin, onS
         const blipColor =
           sig.risk === 'HIGH' || sig.anomalyScore > 50
             ? '#FF3366'
+            : isTestMode
+            ? '#C084FC'
             : sig.kind === 'BLE'
             ? skin.accentSecondary
             : sig.kind === 'CELLULAR'
@@ -386,26 +416,34 @@ export const TacticalRadarMap: React.FC<Props> = ({ location, signals, skin, onS
         ctx.fillStyle = blipColor;
         ctx.fill();
 
-        // Label
-        ctx.fillStyle = skin.textMutedColor;
+        // Label with truthfulness
+        ctx.fillStyle = isTestMode ? '#D8B4FE' : skin.textMutedColor;
         ctx.font = '9px monospace';
-        ctx.fillText(sig.kind === 'BLE' ? 'BLE' : sig.technology.split(' ')[0], px + 8, py + 3);
+        const labelText = sig.isTestEvidence
+          ? `[TEST] ${sig.kind === 'BLE' ? 'BLE' : sig.technology.split(' ')[0]}`
+          : sig.kind === 'BLE'
+          ? 'BLE'
+          : sig.technology.split(' ')[0];
+        ctx.fillText(labelText, px + 8, py + 3);
       });
 
-      sweepAngle += 0.025;
-      if (sweepAngle >= Math.PI * 2) {
-        sweepAngle = 0;
+      if (isLiveOrTestScanning) {
+        sweepAngle += 0.025;
+        if (sweepAngle >= Math.PI * 2) {
+          sweepAngle = 0;
+        }
+        animationFrameId = requestAnimationFrame(render);
       }
-
-      animationFrameId = requestAnimationFrame(render);
     };
 
     render();
 
     return () => {
-      cancelAnimationFrame(animationFrameId);
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
     };
-  }, [location, signals, skin, viewMode]);
+  }, [location, signals, skin, viewMode, isTestMode, capabilityState]);
 
   // Evidence-backed map markers only
   const mapMarkers = useMemo(() => {
@@ -415,6 +453,8 @@ export const TacticalRadarMap: React.FC<Props> = ({ location, signals, skin, onS
         const isAnomaly = sig.risk === 'HIGH' || sig.anomalyScore > 50;
         const color = isAnomaly
           ? '#FF3366'
+          : isTestMode
+          ? '#C084FC'
           : sig.kind === 'BLE'
           ? skin.accentSecondary
           : sig.kind === 'CELLULAR'
@@ -428,11 +468,12 @@ export const TacticalRadarMap: React.FC<Props> = ({ location, signals, skin, onS
           title: sig.label,
           color,
           isAnomaly,
-          freshness: sig.freshness || 'VERIFIED',
-          confidence: sig.locationConfidence || 'KNOWN_LOCATION',
+          freshness: sig.freshness || 'ACTIVE_UNVERIFIED',
+          confidence: sig.locationConfidence || 'ESTIMATED_ZONE',
+          isTestEvidence: sig.isTestEvidence || isTestMode,
         };
       });
-  }, [signals, skin]);
+  }, [signals, skin, isTestMode]);
 
   // Map cellular towers for Leaflet map component
   const leafletTowers = useMemo(() => {
@@ -446,10 +487,16 @@ export const TacticalRadarMap: React.FC<Props> = ({ location, signals, skin, onS
         lat: s.latitude!,
         lon: s.longitude!,
         signalStrength: s.rssiDbm,
-        status: s.risk === 'HIGH' ? ('ROGUE' as const) : ('VERIFIED' as const),
+        status:
+          s.risk === 'HIGH'
+            ? ('ROGUE' as const)
+            : s.verificationStatus === 'CRYPTOGRAPHICALLY_VERIFIED'
+            ? ('VERIFIED' as const)
+            : ('OBSERVED' as const),
+        isTestEvidence: s.isTestEvidence || isTestMode,
         range: 450,
       }));
-  }, [signals]);
+  }, [signals, isTestMode]);
 
   const handleRequestLocation = async () => {
     setIsLocating(true);
@@ -605,25 +652,45 @@ export const TacticalRadarMap: React.FC<Props> = ({ location, signals, skin, onS
           <div className="relative w-full h-full">
             <canvas ref={canvasRef} className="w-full h-full block" />
 
+            {/* Test Evidence Banner */}
+            {isTestMode && (
+              <div className="absolute top-2 left-2 right-2 flex items-center justify-between px-2.5 py-1 rounded-lg bg-purple-950/80 border border-purple-500/40 backdrop-blur-md z-10">
+                <div className="flex items-center gap-1.5 text-[10px] font-mono text-purple-200 font-bold">
+                  <Beaker className="w-3.5 h-3.5 text-purple-400" />
+                  <span>TEST EVIDENCE MODE • ISOLATED SANDBOX</span>
+                </div>
+                {onClearSweep && (
+                  <button
+                    onClick={onClearSweep}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-mono bg-purple-900/60 hover:bg-purple-800 text-purple-100 border border-purple-400/30 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-2.5 h-2.5" />
+                    <span>Clear Sweep</span>
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Empty State Overlay if 0 contacts */}
             {signals.length === 0 && (
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none p-4 text-center">
                 <div className="p-3 rounded-full bg-black/40 border backdrop-blur-sm mb-2" style={{ borderColor: `${skin.borderColor}66` }}>
-                  <Radio className="w-5 h-5 animate-pulse" style={{ color: skin.primaryColor }} />
+                  <Radio className="w-5 h-5 opacity-60" style={{ color: skin.primaryColor }} />
                 </div>
                 <p className="text-xs font-mono font-bold" style={{ color: skin.textPrimaryColor }}>
                   NO ACTIVE RF CONTACTS IN RANGE
                 </p>
-                <p className="text-[11px] max-w-xs mt-1" style={{ color: skin.textMutedColor }}>
-                  Continuous hardware RF sweep active. No anomalous eNodeB/gNodeB base stations or tracking beacons detected.
+                <p className="text-[11px] max-w-xs mt-1 leading-relaxed" style={{ color: skin.textMutedColor }}>
+                  RF hardware sweep unavailable in browser. Native Android capability is required for continuous baseband modem telemetry.
                 </p>
                 {onSampleLoad && (
                   <button
                     onClick={onSampleLoad}
-                    className="mt-3 pointer-events-auto px-3 py-1 text-[11px] font-mono font-bold rounded-lg border transition-all cursor-pointer hover:bg-white/5"
-                    style={{ borderColor: skin.borderColor, color: skin.primaryColor }}
+                    className="mt-3 pointer-events-auto px-3 py-1.5 text-[11px] font-mono font-bold rounded-lg border transition-all cursor-pointer hover:bg-purple-950/30 flex items-center gap-1.5"
+                    style={{ borderColor: '#A855F7', color: '#D8B4FE' }}
                   >
-                    Load Test Evidence
+                    <Beaker className="w-3 h-3" />
+                    Load Test Evidence (Sandbox)
                   </button>
                 )}
               </div>
@@ -640,6 +707,14 @@ export const TacticalRadarMap: React.FC<Props> = ({ location, signals, skin, onS
                     background: `linear-gradient(90deg, transparent 0%, ${skin.primaryColor} 50%, transparent 100%)`,
                   }}
                 />
+              </div>
+            )}
+
+            {/* Test Evidence Banner in Map View */}
+            {isTestMode && (
+              <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-950/90 border border-purple-500/50 backdrop-blur-md text-[10px] font-mono text-purple-200 font-bold">
+                <Beaker className="w-3.5 h-3.5 text-purple-400" />
+                <span>TEST EVIDENCE DATASET</span>
               </div>
             )}
 
@@ -687,7 +762,7 @@ export const TacticalRadarMap: React.FC<Props> = ({ location, signals, skin, onS
                 {/* User Location Marker (Real GPS Fix) */}
                 {location.hasFix && location.latitude && location.longitude && (
                   <Marker longitude={location.longitude} latitude={location.latitude} anchor="center">
-                    <div className="relative flex items-center justify-center w-7 h-7 cursor-pointer" title="Your Verified Position">
+                    <div className="relative flex items-center justify-center w-7 h-7 cursor-pointer" title="Your GPS Fix Position">
                       <div className="absolute w-full h-full rounded-full animate-ping opacity-30" style={{ backgroundColor: skin.primaryColor }} />
                       <div className="absolute w-4 h-4 rounded-full border-2 border-black shadow-lg" style={{ backgroundColor: skin.primaryColor }} />
                       <div className="absolute w-1.5 h-1.5 rounded-full bg-black" />
@@ -716,6 +791,7 @@ export const TacticalRadarMap: React.FC<Props> = ({ location, signals, skin, onS
                         }}
                       />
                       <div className="mt-0.5 px-1 py-0.2 rounded text-[9px] font-mono font-bold bg-black/80 text-white border whitespace-nowrap" style={{ borderColor: `${marker.color}66` }}>
+                        {marker.signal.isTestEvidence ? '[TEST] ' : ''}
                         {marker.signal.kind === 'CELLULAR' ? `CID ${marker.signal.cellId || 'CELL'}` : marker.signal.kind}
                       </div>
                     </div>
@@ -741,8 +817,9 @@ export const TacticalRadarMap: React.FC<Props> = ({ location, signals, skin, onS
                       </div>
                       <div className="text-[11px] text-neutral-700">
                         <div>Tech: {selectedSignal.technology}</div>
-                        <div>Source: {selectedSignal.locationSource || 'Evidence Pipeline'}</div>
-                        <div>Confidence: {selectedSignal.locationConfidence || 'KNOWN_LOCATION'}</div>
+                        <div>Source: {selectedSignal.locationSource || 'Evidence Telemetry'}</div>
+                        <div>Evidence: {selectedSignal.isTestEvidence ? 'Synthetic Test Sandbox' : 'Network Telemetry'}</div>
+                        <div>Status: {selectedSignal.verificationStatus || 'OBSERVED'}</div>
                         <div>Signal: {selectedSignal.rssiDbm ? `${selectedSignal.rssiDbm} dBm` : 'N/A'}</div>
                       </div>
                     </div>
