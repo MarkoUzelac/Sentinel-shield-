@@ -1,5 +1,6 @@
 import { VpnServer, VpnTunnelState } from '../types';
 import { VPN_SERVERS } from '../data/jurisdictions';
+import { ThreatSnapshotEngine } from './threatSnapshotEngine';
 
 export interface VpnSessionStats {
   rxBytes: number;
@@ -45,6 +46,7 @@ export class VpnTunnelStore {
         this.customConfig = savedConf;
       }
     }
+    this.syncWithThreatEngine();
   }
 
   static subscribe(cb: (data: {
@@ -65,6 +67,7 @@ export class VpnTunnelStore {
     if (typeof window !== 'undefined') {
       localStorage.setItem(STORAGE_KEY_SELECTED_SERVER, server.id);
     }
+    this.syncWithThreatEngine();
     this.notify();
   }
 
@@ -73,6 +76,7 @@ export class VpnTunnelStore {
     if (typeof window !== 'undefined') {
       localStorage.setItem(STORAGE_KEY_CUSTOM_CONF, conf);
     }
+    this.syncWithThreatEngine();
     this.notify();
   }
 
@@ -86,14 +90,16 @@ export class VpnTunnelStore {
 
   static async connect(): Promise<void> {
     this.tunnelState = 'Starting';
+    this.syncWithThreatEngine();
     this.notify();
 
     await new Promise((r) => setTimeout(r, 600));
     this.tunnelState = 'Verifying';
+    this.syncWithThreatEngine();
     this.notify();
 
     await new Promise((r) => setTimeout(r, 700));
-    const now = Date.now();
+    const now = ThreatSnapshotEngine.getClock().now();
     this.tunnelState = 'Connected';
     this.stats = {
       rxBytes: 124500,
@@ -109,17 +115,20 @@ export class VpnTunnelStore {
       if (this.tunnelState === 'Connected') {
         const deltaRx = Math.round(Math.random() * 45000 + 15000);
         const deltaTx = Math.round(Math.random() * 25000 + 8000);
+        const currentClock = ThreatSnapshotEngine.getClock().now();
         this.stats = {
           ...this.stats,
           rxBytes: this.stats.rxBytes + deltaRx,
           txBytes: this.stats.txBytes + deltaTx,
-          lastHandshakeEpochMs: Date.now() - Math.round(Math.random() * 12000),
+          lastHandshakeEpochMs: currentClock - Math.round(Math.random() * 12000),
           handshakeVerified: true,
         };
+        this.syncWithThreatEngine();
         this.notify();
       }
-    }, 2000);
+    }, 3000);
 
+    this.syncWithThreatEngine();
     this.notify();
   }
 
@@ -137,6 +146,7 @@ export class VpnTunnelStore {
       handshakeVerified: false,
       endpoint: this.selectedServer.endpoint || 'ch1.sentinel-shield.net:51820',
     };
+    this.syncWithThreatEngine();
     this.notify();
   }
 
@@ -147,6 +157,19 @@ export class VpnTunnelStore {
       stats: this.stats,
       customConfig: this.customConfig,
     };
+  }
+
+  private static syncWithThreatEngine() {
+    ThreatSnapshotEngine.setVpnState({
+      tunnelState: this.tunnelState,
+      selectedServer: this.selectedServer,
+      rxBytes: this.stats.rxBytes,
+      txBytes: this.stats.txBytes,
+      connectedSince: this.stats.connectedSince,
+      lastHandshakeEpochMs: this.stats.lastHandshakeEpochMs,
+      endpoint: this.stats.endpoint,
+      customConfig: this.customConfig,
+    });
   }
 
   private static notify() {

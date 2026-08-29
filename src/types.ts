@@ -1,4 +1,24 @@
-export type CapabilityStatus = 'VERIFIED' | 'UNVERIFIED' | 'UNAVAILABLE';
+export type AuditStatus = 'UNAVAILABLE' | 'UNVERIFIED' | 'VERIFIED' | 'FAILED';
+export type CapabilityStatus = 'VERIFIED' | 'UNVERIFIED' | 'UNAVAILABLE' | 'FAILED';
+export type EvidenceFreshness = 'VERIFIED' | 'ACTIVE_UNVERIFIED' | 'STALE' | 'UNAVAILABLE' | 'FAILED';
+export type LocationConfidence = 'KNOWN_LOCATION' | 'ESTIMATED_ZONE' | 'LAST_SEEN' | 'UNAVAILABLE';
+export type GeolocationPermissionState = 'PROMPT' | 'GRANTED' | 'DENIED' | 'PERMANENTLY_DENIED' | 'UNSUPPORTED';
+
+export type MmiAuditState =
+  | 'IDLE'
+  | 'DISPATCH_REQUESTED'
+  | 'DIALER_OPENED'
+  | 'WAITING_FOR_OPERATOR_RESULT'
+  | 'UNVERIFIED'
+  | 'VERIFIED'
+  | 'FAILED'
+  | 'UNAVAILABLE';
+
+export interface AuditActionRequired {
+  label: string;
+  action: string;
+  type: 'GRANT_PERMISSION' | 'OPEN_SETTINGS' | 'RUN_PROBE' | 'RETRY' | 'RUN_MMI' | 'REFRESH_AUDIT';
+}
 
 export type CapabilityId =
   | 'VPN_TRANSPORT'
@@ -24,11 +44,35 @@ export interface CapabilityEvidence {
   id: CapabilityId;
   title: string;
   status: CapabilityStatus;
+  freshness?: EvidenceFreshness;
   source: string;
+  reason: string;
   details: string;
   lastCheckedEpochMs: number;
-  provenance?: EvidenceProvenance;
+  ttlMs: number;
   expiresAtEpochMs: number;
+  isStale?: boolean;
+  evidence: Record<string, any>;
+  limitations: string[];
+  requiredCapabilities?: string[];
+  availableCapabilities?: string[];
+  actionRequired?: AuditActionRequired;
+  provenance?: EvidenceProvenance;
+}
+
+export interface StructuredAuditLog {
+  id: string;
+  timestamp: number;
+  auditName: string;
+  auditSource: string;
+  requiredCapabilities: string[];
+  availableCapabilities: string[];
+  rawEvidence: Record<string, any>;
+  evaluationRule: string;
+  finalStatus: CapabilityStatus;
+  limitations: string[];
+  ttlMs: number;
+  expiresAt: number;
 }
 
 export type ThreatSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'SAFE';
@@ -43,6 +87,7 @@ export interface ThreatItem {
   timestamp: number;
   isResolved: boolean;
   runtimeBacked?: boolean;
+  freshness?: EvidenceFreshness;
 }
 
 export interface VpnServer {
@@ -57,7 +102,7 @@ export interface VpnServer {
   publicKey?: string;
   allowedIPs?: string;
   jurisdictionScore?: number;
-  privacyType?: '14-Eyes' | 'Privacy Haven' | '5-Eyes' | 'Standard';
+  privacyType?: '14-Eyes' | 'Privacy Haven' | '5-Eyes' | 'Standard' | '9-Eyes' | 'Restricted';
 }
 
 export type VpnTunnelState =
@@ -67,6 +112,19 @@ export type VpnTunnelState =
   | 'Connected'
   | 'Error'
   | 'AwaitingUserConsent';
+
+export interface VpnEvidenceState {
+  tunnelState: VpnTunnelState;
+  selectedServer: VpnServer;
+  rxBytes: number;
+  txBytes: number;
+  connectedSince: number | null;
+  lastHandshakeEpochMs: number | null;
+  handshakeVerified: boolean;
+  freshness: EvidenceFreshness;
+  endpoint: string;
+  customConfig?: string;
+}
 
 export type SignalKind = 'BLE' | 'CELLULAR' | 'WIFI_NETWORK' | 'VPN_NETWORK';
 export type SignalRisk = 'INFO' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
@@ -87,6 +145,8 @@ export interface SignalRadarItem {
   bearingDegrees?: number;
   locationSource?: string;
   locationAccuracyMeters?: number;
+  locationConfidence?: LocationConfidence;
+  freshness?: EvidenceFreshness;
   mcc?: number;
   mnc?: number;
   risk: SignalRisk;
@@ -113,6 +173,7 @@ export interface SignalRadarSnapshot {
   anomalyScore: number;
   startedAtEpochMs: number;
   lastUpdatedEpochMs: number;
+  freshness: EvidenceFreshness;
   error?: string | null;
 }
 
@@ -123,6 +184,9 @@ export interface DeviceLocationState {
   accuracyMeters: number | null;
   coordinateLabel: string;
   isLiveGps: boolean;
+  confidence: LocationConfidence;
+  freshness: EvidenceFreshness;
+  permissionState: GeolocationPermissionState;
   timestamp: number;
 }
 
@@ -132,8 +196,29 @@ export interface NetworkObservation {
   validated: boolean;
   vpnTransport: boolean;
   dnsServers: string[];
+  dnsReachable: boolean;
+  dnsSecure: boolean;
   interfaceName?: string | null;
   blocked: boolean;
+  httpsProbeLatencyMs?: number | null;
+  httpsProbeTls?: string;
+  httpsProbeStatusCode?: number | null;
+  freshness?: EvidenceFreshness;
+  timestamp?: number;
+}
+
+export interface ThreatSnapshot {
+  timestamp: number;
+  freshness: EvidenceFreshness;
+  overallScore: number;
+  location: DeviceLocationState;
+  radar: SignalRadarSnapshot;
+  vpn: VpnEvidenceState;
+  network: NetworkObservation;
+  evidences: CapabilityEvidence[];
+  threats: ThreatItem[];
+  activeThreatCount: number;
+  auditCompletedAt: number | null;
 }
 
 export interface NetworkSpeedResult {
@@ -165,6 +250,17 @@ export interface DarkWebBreach {
   compromisedFields: string[];
   riskLevel: 'HIGH' | 'MEDIUM' | 'LOW';
   description: string;
+}
+
+export interface GeocodingResult {
+  latitude: number;
+  longitude: number;
+  formattedAddress: string;
+  city?: string;
+  country?: string;
+  countryCode?: string;
+  postcode?: string;
+  state?: string;
 }
 
 export interface JurisdictionProtection {

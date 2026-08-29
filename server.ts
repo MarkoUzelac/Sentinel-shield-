@@ -1,5 +1,6 @@
 import express, { Request, Response } from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 
@@ -238,7 +239,7 @@ User question: ${userMessage}`;
     });
   });
 
-  // Dark Web Breaches Search Endpoint
+  // Dark Web Breaches Search Endpoint (X-Posed-Or-Not Open Source API)
   app.post("/api/darkweb-search", async (req: Request, res: Response) => {
     const { query } = req.body;
     const account = String(query || "").trim();
@@ -247,67 +248,291 @@ User question: ${userMessage}`;
       return res.status(400).json({ error: "Query is required" });
     }
 
-    const apiKey = process.env.HIBP_API_KEY;
-
-    if (apiKey && apiKey !== "MY_HIBP_API_KEY") {
-      try {
-        const encoded = encodeURIComponent(account);
-        const hibpRes = await fetch(
-          `https://haveibeenpwned.com/api/v3/breachedaccount/${encoded}?truncateResponse=false`,
-          {
-            headers: {
-              "hibp-api-key": apiKey,
-              "user-agent": "Sentinel-Shield-Pro/2.8.0",
-            },
-          }
-        );
-
-        if (hibpRes.status === 404) {
-          return res.json({ breaches: [], provider: "HIBP (Live)" });
+    try {
+      const encoded = encodeURIComponent(account);
+      const xonRes = await fetch(
+        `https://api.xposedornot.com/v1/breach-analytics?email=${encoded}`,
+        {
+          headers: {
+            "user-agent": "Sentinel-Shield-Pro/2.8.0",
+          },
         }
+      );
 
-        if (hibpRes.ok) {
-          const data = (await hibpRes.json()) as Array<{
-            Name?: string;
-            Domain?: string;
-            BreachDate?: string;
-            DataClasses?: string[];
-            Title?: string;
-          }>;
-          const breaches = data.map((b, idx) => {
-            const fields = b.DataClasses || [];
-            const sensitive = fields.some((f) => {
-              const lower = f.toLowerCase();
-              return (
-                lower.includes("password") ||
-                lower.includes("credit") ||
-                lower.includes("authentication") ||
-                lower.includes("social")
-              );
-            });
-            return {
-              id: `hibp_${b.Name || idx}`,
-              domain: b.Domain || "N/A",
-              breachDate: b.BreachDate || "N/A",
-              compromisedFields: fields,
-              riskLevel: sensitive ? "HIGH" : fields.length > 0 ? "MEDIUM" : "LOW",
-              description: b.Title || "Have I Been Pwned breach record",
-            };
-          });
-          return res.json({ breaches, provider: "HIBP (Live)" });
-        }
-      } catch (err) {
-        console.warn("HIBP fetch failed:", err);
+      if (xonRes.status === 404) {
+        return res.json({ breaches: [], provider: "X-Posed-Or-Not (Open OSINT)" });
       }
+
+      if (xonRes.ok) {
+        const data = await xonRes.json();
+        const details = data?.ExposedBreaches?.breaches_details || [];
+        
+        const breaches = details.map((b: any, idx: number) => {
+          const fieldsStr = b.xposed_data || "";
+          const fields = fieldsStr.split(";").map((f: string) => f.trim()).filter(Boolean);
+          
+          const sensitive = fields.some((f: string) => {
+            const lower = f.toLowerCase();
+            return (
+              lower.includes("password") ||
+              lower.includes("credit") ||
+              lower.includes("authentication") ||
+              lower.includes("social")
+            );
+          });
+
+          return {
+            id: `xon_${b.breach || idx}`,
+            domain: b.domain || "N/A",
+            breachDate: b.xposed_date || "N/A",
+            compromisedFields: fields,
+            riskLevel: sensitive ? "HIGH" : fields.length > 0 ? "MEDIUM" : "LOW",
+            description: b.details || "Exposed breach record found.",
+          };
+        });
+
+        return res.json({ breaches, provider: "X-Posed-Or-Not (Open OSINT)" });
+      }
+    } catch (err) {
+      console.warn("X-Posed-Or-Not fetch failed:", err);
     }
 
-    // If no HIBP API key is provided, match the Android project behavior:
-    // "Provjera koristi stvarni HIBP provider kada je konfiguriran. Bez providera nema sintetičkih rezultata."
     return res.json({
       breaches: [],
-      provider: "HIBP_UNCONFIGURED",
-      note: "No HIBP API Key configured. In accordance with zero-slop and evidence verification guidelines, synthetic breaches are not fabricated.",
+      provider: "X-Posed-Or-Not (Open OSINT)",
+      note: "Analytics fetch failed or rate limited.",
     });
+  });
+
+  // In-memory cache for geocoding queries (5-minute TTL, max 250 items)
+  interface GeoCacheEntry {
+    data: unknown;
+    expiresAt: number;
+  }
+  const geoCache = new Map<string, GeoCacheEntry>();
+  const GEO_CACHE_TTL_MS = 5 * 60 * 1000;
+
+  function getFromGeoCache<T>(key: string): T | null {
+    const entry = geoCache.get(key);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) {
+      geoCache.delete(key);
+      return null;
+    }
+    return entry.data as T;
+  }
+
+  function setInGeoCache(key: string, data: unknown): void {
+    if (geoCache.size >= 250) {
+      const oldestKey = geoCache.keys().next().value;
+      if (oldestKey) geoCache.delete(oldestKey);
+    }
+    geoCache.set(key, { data, expiresAt: Date.now() + GEO_CACHE_TTL_MS });
+  }
+
+  // Keyless Geocoding Search (OSM Nominatim with Photon fallback & caching)
+  app.get("/api/geocode/search", async (req: Request, res: Response) => {
+    const query = String(req.query.q || "").trim();
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit || "5"), 10) || 5, 1), 15);
+    const lang = String(req.query.lang || "en").slice(0, 10);
+
+    if (!query || query.length < 2) {
+      return res.json({ results: [] });
+    }
+
+    const cacheKey = `search:${query.toLowerCase()}:${limit}:${lang}`;
+    const cached = getFromGeoCache<unknown[]>(cacheKey);
+    if (cached) {
+      return res.json({ results: cached, cached: true });
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+    try {
+      const encodedQuery = encodeURIComponent(query);
+      const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodedQuery}&format=jsonv2&addressdetails=1&limit=${limit}&accept-language=${encodeURIComponent(lang)}`;
+
+      const response = await fetch(nominatimUrl, {
+        method: "GET",
+        headers: {
+          "User-Agent": "Sentinel-Shield-Pro/2.8.0 (security-audit@sentinel.local; https://github.com/sentinel-shield)",
+          "Accept": "application/json",
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const rawData = await response.json();
+        if (Array.isArray(rawData)) {
+          const results = rawData.map((item: any) => {
+            const addr = item.address || {};
+            const city =
+              addr.city ||
+              addr.town ||
+              addr.village ||
+              addr.municipality ||
+              addr.suburb ||
+              addr.county;
+            const boundingBox = Array.isArray(item.boundingbox) && item.boundingbox.length === 4
+              ? [
+                  parseFloat(item.boundingbox[0]),
+                  parseFloat(item.boundingbox[1]),
+                  parseFloat(item.boundingbox[2]),
+                  parseFloat(item.boundingbox[3]),
+                ]
+              : undefined;
+
+            return {
+              id: item.place_id ? String(item.place_id) : undefined,
+              name: item.name || city || item.display_name?.split(",")[0],
+              displayName: item.display_name,
+              formattedAddress: item.display_name,
+              latitude: parseFloat(item.lat),
+              longitude: parseFloat(item.lon),
+              city,
+              state: addr.state || addr.region,
+              country: addr.country,
+              countryCode: addr.country_code ? String(addr.country_code).toUpperCase() : undefined,
+              postcode: addr.postcode,
+              boundingBox,
+            };
+          }).filter((r) => !isNaN(r.latitude) && !isNaN(r.longitude));
+
+          setInGeoCache(cacheKey, results);
+          return res.json({ results });
+        }
+      }
+    } catch (err: unknown) {
+      clearTimeout(timeoutId);
+      console.warn("[Geocode Server] Nominatim search failed, trying fallback:", err);
+    }
+
+    // Fallback: Photon Komoot open geocoding API
+    try {
+      const photonController = new AbortController();
+      const photonTimeout = setTimeout(() => photonController.abort(), 5000);
+      const encoded = encodeURIComponent(query);
+      const photonUrl = `https://photon.komoot.io/api/?q=${encoded}&limit=${limit}&lang=${encodeURIComponent(lang)}`;
+
+      const photonRes = await fetch(photonUrl, {
+        headers: { "Accept": "application/json" },
+        signal: photonController.signal,
+      });
+      clearTimeout(photonTimeout);
+
+      if (photonRes.ok) {
+        const data = await photonRes.json();
+        if (Array.isArray(data.features)) {
+          const results = data.features.map((feat: any) => {
+            const props = feat.properties || {};
+            const coords = feat.geometry?.coordinates || [];
+            const lat = coords[1];
+            const lon = coords[0];
+            const name = props.name || props.street || props.city;
+            const parts = [name, props.district, props.city, props.state, props.country].filter(Boolean);
+            const formattedAddress = parts.join(", ") || `${lat}, ${lon}`;
+
+            return {
+              id: props.osm_id ? String(props.osm_id) : undefined,
+              name: name || formattedAddress,
+              displayName: formattedAddress,
+              formattedAddress,
+              latitude: lat,
+              longitude: lon,
+              city: props.city || props.town,
+              state: props.state,
+              country: props.country,
+              countryCode: props.countrycode ? String(props.countrycode).toUpperCase() : undefined,
+              postcode: props.postcode,
+            };
+          }).filter((r: any) => typeof r.latitude === "number" && typeof r.longitude === "number");
+
+          setInGeoCache(cacheKey, results);
+          return res.json({ results });
+        }
+      }
+    } catch (err) {
+      console.warn("[Geocode Server] Photon fallback failed:", err);
+    }
+
+    return res.json({ results: [] });
+  });
+
+  // Keyless Reverse Geocoding (OSM Nominatim)
+  app.get("/api/geocode/reverse", async (req: Request, res: Response) => {
+    const lat = parseFloat(String(req.query.lat || ""));
+    const lon = parseFloat(String(req.query.lon || req.query.lng || ""));
+    const lang = String(req.query.lang || "en").slice(0, 10);
+
+    if (isNaN(lat) || isNaN(lon)) {
+      return res.status(400).json({ error: "Valid lat and lon parameters are required" });
+    }
+
+    const cacheKey = `reverse:${lat.toFixed(4)}:${lon.toFixed(4)}:${lang}`;
+    const cached = getFromGeoCache<unknown>(cacheKey);
+    if (cached) {
+      return res.json({ result: cached, cached: true });
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+    try {
+      const nominatimUrl = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=jsonv2&addressdetails=1&accept-language=${encodeURIComponent(lang)}`;
+      const response = await fetch(nominatimUrl, {
+        method: "GET",
+        headers: {
+          "User-Agent": "Sentinel-Shield-Pro/2.8.0 (security-audit@sentinel.local; https://github.com/sentinel-shield)",
+          "Accept": "application/json",
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const item = await response.json();
+        const addr = item.address || {};
+        const city =
+          addr.city ||
+          addr.town ||
+          addr.village ||
+          addr.municipality ||
+          addr.suburb ||
+          addr.county;
+
+        const result = {
+          id: item.place_id ? String(item.place_id) : undefined,
+          name: item.name || city || item.display_name?.split(",")[0],
+          displayName: item.display_name,
+          formattedAddress: item.display_name || `${lat.toFixed(5)}, ${lon.toFixed(5)}`,
+          latitude: parseFloat(item.lat) || lat,
+          longitude: parseFloat(item.lon) || lon,
+          city,
+          state: addr.state || addr.region,
+          country: addr.country,
+          countryCode: addr.country_code ? String(addr.country_code).toUpperCase() : undefined,
+          postcode: addr.postcode,
+        };
+
+        setInGeoCache(cacheKey, result);
+        return res.json({ result });
+      }
+    } catch (err: unknown) {
+      clearTimeout(timeoutId);
+      console.warn("[Geocode Server] Nominatim reverse geocode failed:", err);
+    }
+
+    // Graceful coordinate fallback
+    const fallbackResult = {
+      latitude: lat,
+      longitude: lon,
+      formattedAddress: `${lat.toFixed(5)}, ${lon.toFixed(5)}`,
+    };
+    return res.json({ result: fallbackResult });
   });
 
   // Vite middleware for development vs static build for production
@@ -318,7 +543,12 @@ User question: ${userMessage}`;
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), "dist");
+    const candidates = [
+      path.join(process.cwd(), "dist"),
+      __dirname,
+      path.join(__dirname, "dist"),
+    ];
+    const distPath = candidates.find((p) => fs.existsSync(path.join(p, "index.html"))) || path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*", (req: Request, res: Response) => {
       res.sendFile(path.join(distPath, "index.html"));

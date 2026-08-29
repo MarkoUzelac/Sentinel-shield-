@@ -337,6 +337,7 @@ export const DashboardView: React.FC<Props> = ({
               key={evidence.id}
               evidence={evidence}
               skin={skin}
+              onNavigateTab={onNavigateTab}
             />
           ))}
         </div>

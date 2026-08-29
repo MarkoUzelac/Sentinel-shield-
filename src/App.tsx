@@ -10,8 +10,10 @@ import {
 } from './types';
 import { APP_SKINS, getSkinById } from './data/themes';
 import { CapabilityEvidenceEngine } from './services/evidenceEngine';
+import { ThreatSnapshotEngine } from './services/threatSnapshotEngine';
 import { ScanDatabase } from './services/scanDatabase';
 import { VpnTunnelStore } from './services/vpnStore';
+import { ipLocationService } from './services/geo';
 import { Navigation } from './components/Navigation';
 import { DashboardView } from './views/DashboardView';
 import { RadarView } from './views/RadarView';
@@ -25,16 +27,10 @@ import { VaultView } from './views/VaultView';
 import { HelpModal } from './views/HelpModal';
 import { AiAssistantModal } from './components/AiAssistantModal';
 import { SplashScreenView } from './views/SplashScreenView';
-import { AnimatePresence, motion } from 'motion/react';
-import { ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { ToastProvider, useToast } from './context/ToastContext';
+import { ToastContainer } from './components/ToastContainer';
 
-interface ToastMessage {
-  id: string;
-  message: string;
-  type: 'success' | 'alert';
-}
-
-export const App: React.FC = () => {
+const AppContent: React.FC = () => {
   // App state
   const [currentSkinId, setCurrentSkinId] = useState<AppSkinId>('phosphor');
   const [currentLanguage, setCurrentLanguage] = useState<AppLanguageCode>('en');
@@ -51,59 +47,27 @@ export const App: React.FC = () => {
   const [threats, setThreats] = useState<ThreatItem[]>(ScanDatabase.getThreats());
   const [overallScore, setOverallScore] = useState<number>(CapabilityEvidenceEngine.calculateOverallScore());
   
-  // Toast state
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
-
-  const addToast = useCallback((message: string, type: 'success' | 'alert') => {
-    const id = Math.random().toString(36).substring(2, 9);
-    setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
-  }, []);
+  const { addToast } = useToast();
 
   // Location state
-  const [location, setLocation] = useState<DeviceLocationState>({
-    hasFix: false,
-    latitude: null,
-    longitude: null,
-    accuracyMeters: null,
-    coordinateLabel: 'Searching GPS constellation...',
-    isLiveGps: false,
-    timestamp: Date.now(),
-  });
+  const [location, setLocation] = useState<DeviceLocationState>(() => ThreatSnapshotEngine.getSnapshot().location);
 
+  // Initialization
   useEffect(() => {
-    if (typeof window !== 'undefined' && 'geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const lat = position.coords.latitude;
-          const lng = position.coords.longitude;
-          setLocation({
-            hasFix: true,
-            latitude: lat,
-            longitude: lng,
-            accuracyMeters: position.coords.accuracy,
-            coordinateLabel: `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° W (LIVE_FIX)`,
-            isLiveGps: true,
-            timestamp: Date.now(),
-          });
-        },
-        (error) => {
-          console.warn('Geolocation failed, falling back to simulated fix.', error);
-          setLocation({
-            hasFix: true,
-            latitude: 47.6062,
-            longitude: -122.3321,
-            accuracyMeters: 4.2,
-            coordinateLabel: '47.6062° N, 122.3321° W (SEATTLE_MUNI)',
-            isLiveGps: false,
-            timestamp: Date.now(),
-          });
-        },
-        { enableHighAccuracy: true, timeout: 5000 }
-      );
-    }
+    VpnTunnelStore.init();
+
+    // Subscribe to ThreatSnapshotEngine for single source of truth
+    const unsubscribe = ThreatSnapshotEngine.subscribe((snapshot) => {
+      setLocation(snapshot.location);
+      setEvidences(snapshot.evidences);
+      setOverallScore(snapshot.overallScore);
+      setThreats(snapshot.threats);
+    });
+
+    // Request geolocation through canonical evidence engine
+    ThreatSnapshotEngine.requestGeolocationPermission();
+
+    return () => unsubscribe();
   }, []);
 
   const skin: AppSkinConfig = getSkinById(currentSkinId);
@@ -116,39 +80,6 @@ export const App: React.FC = () => {
   if (showSplash) {
     return <SplashScreenView onComplete={handleOnboardingComplete} skin={skin} />;
   }
-
-  // Initialization
-  useEffect(() => {
-    VpnTunnelStore.init();
-
-    // Geolocation API check
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setLocation({
-            hasFix: true,
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-            accuracyMeters: pos.coords.accuracy,
-            coordinateLabel: `${pos.coords.latitude.toFixed(4)}° N, ${pos.coords.longitude.toFixed(4)}° E`,
-            timestampEpochMs: Date.now(),
-          });
-        },
-        (err) => {
-          console.warn('Geolocation fallback:', err.message);
-          setLocation({
-            hasFix: true,
-            latitude: 45.815,
-            longitude: 15.9819,
-            accuracyMeters: 15,
-            coordinateLabel: '45.8150° N, 15.9819° E (Zagreb Node)',
-            timestampEpochMs: Date.now(),
-          });
-        },
-        { enableHighAccuracy: true, timeout: 5000 }
-      );
-    }
-  }, []);
 
   const handleRunFullAudit = async () => {
     await CapabilityEvidenceEngine.refreshAllEvidences();
@@ -276,36 +207,17 @@ export const App: React.FC = () => {
         skin={skin}
       />
 
-      {/* Toast Notification Container */}
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none">
-        <AnimatePresence>
-          {toasts.map((toast) => (
-            <motion.div
-              key={toast.id}
-              initial={{ opacity: 0, y: 50, scale: 0.9 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
-              className="flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border backdrop-blur-md pointer-events-auto"
-              style={{
-                backgroundColor: skin.surfaceColor,
-                borderColor: toast.type === 'alert' ? '#ef4444' : skin.primaryColor,
-                color: skin.textPrimaryColor,
-              }}
-            >
-              {toast.type === 'alert' ? (
-                <ShieldAlert className="w-5 h-5 text-red-500" />
-              ) : (
-                <CheckCircle2
-                  className="w-5 h-5"
-                  style={{ color: skin.primaryColor }}
-                />
-              )}
-              <span className="text-sm font-medium">{toast.message}</span>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
+      {/* Universal Toast Notification Container */}
+      <ToastContainer skin={skin} />
     </div>
+  );
+};
+
+export const App: React.FC = () => {
+  return (
+    <ToastProvider>
+      <AppContent />
+    </ToastProvider>
   );
 };
 

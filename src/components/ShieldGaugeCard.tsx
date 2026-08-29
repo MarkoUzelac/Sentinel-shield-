@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Shield, ShieldAlert, ShieldCheck, RefreshCw, Sparkles, Network, Radio, PhoneCall } from 'lucide-react';
 import { AppSkinConfig } from '../types';
 
@@ -18,6 +18,7 @@ export const ShieldGaugeCard: React.FC<Props> = ({
   skin,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [showActionPanel, setShowActionPanel] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -136,8 +137,11 @@ export const ShieldGaugeCard: React.FC<Props> = ({
         </div>
 
         {/* Status Pill */}
-        <div
-          className="mt-3 inline-flex items-center gap-2 px-4 py-1.5 rounded-full border text-xs font-bold uppercase tracking-wider"
+        <button
+          onClick={() => {
+            if (score < 90) setShowActionPanel(!showActionPanel);
+          }}
+          className={`mt-3 inline-flex items-center gap-2 px-4 py-1.5 rounded-full border text-xs font-bold uppercase tracking-wider transition-transform ${score < 90 ? 'cursor-pointer hover:scale-105' : 'cursor-default'}`}
           style={{
             color: statusConfig.color,
             backgroundColor: statusConfig.bg,
@@ -146,7 +150,45 @@ export const ShieldGaugeCard: React.FC<Props> = ({
         >
           <StatusIcon className="w-4 h-4" />
           <span>{statusConfig.text}</span>
-        </div>
+        </button>
+
+        {/* Action Panel */}
+        {showActionPanel && score < 90 && (
+          <div className="mt-4 p-4 rounded-xl text-left border bg-black/40 backdrop-blur w-full max-w-sm animate-in fade-in zoom-in-95" style={{ borderColor: statusConfig.border }}>
+            <h4 className="text-xs font-bold uppercase mb-2" style={{ color: statusConfig.color }}>
+              Vulnerabilities Detected
+            </h4>
+            <ul className="text-[11px] space-y-2 mb-4" style={{ color: skin.textPrimaryColor }}>
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full mt-1 shrink-0" style={{ backgroundColor: statusConfig.color }} />
+                <span><strong style={{ color: skin.textPrimaryColor }}>Unsecured Network Traffic:</strong> Your connection may be exposed to ISP monitoring or local packet sniffing.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full mt-1 shrink-0" style={{ backgroundColor: statusConfig.color }} />
+                <span><strong style={{ color: skin.textPrimaryColor }}>Missing Malware Scan:</strong> A deep system scan hasn't been run recently, leaving you vulnerable to zero-days.</span>
+              </li>
+            </ul>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => onNavigateTab('vpn')}
+                className="w-full py-2 rounded-lg text-xs font-bold bg-white/10 hover:bg-white/20 transition-colors"
+                style={{ color: skin.textPrimaryColor }}
+              >
+                Enable WireGuard VPN
+              </button>
+              <button
+                onClick={() => {
+                  setShowActionPanel(false);
+                  onStartAudit();
+                }}
+                className="w-full py-2 rounded-lg text-xs font-bold bg-white/10 hover:bg-white/20 transition-colors"
+                style={{ color: skin.textPrimaryColor }}
+              >
+                Run Deep Security Audit
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Audit Button */}
         <button

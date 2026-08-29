@@ -92,7 +92,7 @@ export const DarkWebView: React.FC<Props> = ({ skin }) => {
         <div className="p-4 rounded-2xl border flex items-start gap-3" style={{ backgroundColor: skin.cardColor, borderColor: 'rgba(255, 179, 0, 0.4)' }}>
           <Info className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
           <div className="text-xs space-y-1">
-            <h4 className="font-bold text-amber-400">HIBP Provider Standard</h4>
+            <h4 className="font-bold text-amber-400">Open Source OSINT Intelligence</h4>
             <p style={{ color: skin.textSecondaryColor }}>{providerNote}</p>
           </div>
         </div>

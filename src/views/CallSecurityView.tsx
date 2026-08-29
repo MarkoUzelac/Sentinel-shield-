@@ -1,13 +1,38 @@
-import React, { useState } from 'react';
-import { AppSkinConfig } from '../types';
-import { PhoneCall, ShieldAlert, ShieldCheck, ExternalLink, Keypad, Mic, MessageSquare, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { AppSkinConfig, MmiAuditState } from '../types';
+import { MmiAuditService, MmiInquiryRecord } from '../services/mmiAuditService';
+import {
+  PhoneCall,
+  ShieldAlert,
+  ShieldCheck,
+  AlertTriangle,
+  RefreshCw,
+  Mic,
+  MessageSquare,
+  Radio,
+  ExternalLink,
+  Clock,
+  Info,
+} from 'lucide-react';
+import { useToast } from '../context/ToastContext';
 
 interface Props {
   skin: AppSkinConfig;
 }
 
 export const CallSecurityView: React.FC<Props> = ({ skin }) => {
-  const [activeCodeResult, setActiveCodeResult] = useState<{ code: string; label: string } | null>(null);
+  const [mmiState, setMmiState] = useState<{
+    currentState: MmiAuditState;
+    lastInquiry: MmiInquiryRecord | null;
+  }>(MmiAuditService.getState());
+  const { addToast } = useToast();
+
+  useEffect(() => {
+    const unsubscribe = MmiAuditService.subscribe((state) => {
+      setMmiState(state);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const mmiCodes = [
     {
@@ -37,20 +62,39 @@ export const CallSecurityView: React.FC<Props> = ({ skin }) => {
     },
   ];
 
-  const handleDialCode = (code: string, label: string) => {
-    setActiveCodeResult({ code, label });
-    if (typeof window !== 'undefined') {
-      window.location.href = `tel:${encodeURIComponent(code)}`;
-    }
+  const handleDispatchCode = async (code: string, label: string) => {
+    addToast(`Dispatching MMI inquiry ${code} via system dialer...`, 'info');
+    await MmiAuditService.dispatchMmiInquiry(code);
   };
+
+  const { currentState, lastInquiry } = mmiState;
+  const isDispatching =
+    currentState === 'DISPATCH_REQUESTED' ||
+    currentState === 'DIALER_OPENED' ||
+    currentState === 'WAITING_FOR_OPERATOR_RESULT';
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <span className="text-[10px] font-bold font-mono tracking-widest uppercase px-2 py-0.5 rounded" style={{ backgroundColor: `${skin.primaryColor}22`, color: skin.primaryColor }}>
-          CARRIER SS7 & MMI TELEMETRY
-        </span>
+        <div className="flex items-center gap-2">
+          <span
+            className="text-[10px] font-bold font-mono tracking-widest uppercase px-2 py-0.5 rounded"
+            style={{ backgroundColor: `${skin.primaryColor}22`, color: skin.primaryColor }}
+          >
+            CARRIER SS7 & MMI TELEMETRY
+          </span>
+          <span
+            className="text-[10px] font-mono px-2 py-0.5 rounded uppercase font-bold"
+            style={{
+              backgroundColor: 'rgba(255, 179, 0, 0.15)',
+              color: '#FFB300',
+              border: '1px solid rgba(255, 179, 0, 0.3)',
+            }}
+          >
+            STATE: {currentState}
+          </span>
+        </div>
         <h2 className="text-xl font-black mt-1" style={{ color: skin.textPrimaryColor }}>
           Wiretap & Call Redirection Audit
         </h2>
@@ -59,20 +103,100 @@ export const CallSecurityView: React.FC<Props> = ({ skin }) => {
         </p>
       </div>
 
-      {/* Warning Notice Card */}
+      {/* Live MMI State Machine Card */}
       <div
-        className="p-4 rounded-2xl border flex items-start gap-3"
+        className="p-5 rounded-2xl border space-y-3"
         style={{
           backgroundColor: skin.cardColor,
-          borderColor: 'rgba(255, 179, 0, 0.4)',
+          borderColor: isDispatching ? skin.primaryColor : 'rgba(255, 179, 0, 0.45)',
         }}
       >
-        <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-        <div className="text-xs space-y-1">
-          <h4 className="font-bold text-amber-400">Carrier Verification Standard</h4>
-          <p style={{ color: skin.textSecondaryColor }}>
-            Clicking a code initiates an authentic operator MMI lookup via the device dialer. In accordance with zero-slop evidence verification, Sentinel audits the dial request while carrier network responses remain under operator jurisdiction.
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div
+              className={`w-10 h-10 rounded-xl flex items-center justify-center border ${
+                isDispatching ? 'animate-spin' : ''
+              }`}
+              style={{
+                backgroundColor: isDispatching ? `${skin.primaryColor}22` : 'rgba(255, 179, 0, 0.12)',
+                borderColor: isDispatching ? skin.primaryColor : 'rgba(255, 179, 0, 0.4)',
+                color: isDispatching ? skin.primaryColor : '#FFB300',
+              }}
+            >
+              {isDispatching ? <RefreshCw className="w-5 h-5" /> : <PhoneCall className="w-5 h-5" />}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold" style={{ color: skin.textPrimaryColor }}>
+                  MMI Inquiry State Machine
+                </h3>
+                <span
+                  className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded uppercase"
+                  style={{
+                    backgroundColor: isDispatching ? `${skin.primaryColor}22` : 'rgba(255, 179, 0, 0.2)',
+                    color: isDispatching ? skin.primaryColor : '#FFB300',
+                  }}
+                >
+                  {currentState}
+                </span>
+              </div>
+              <p className="text-xs mt-0.5" style={{ color: skin.textSecondaryColor }}>
+                {lastInquiry?.explanation || 'No inquiry dispatched in current session.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="shrink-0">
+            <button
+              onClick={() => handleDispatchCode('*#21#', 'All Call Forwarding')}
+              disabled={isDispatching}
+              className="px-4 py-2 rounded-xl text-xs font-bold font-mono flex items-center gap-1.5 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+              style={{
+                backgroundColor: skin.primaryColor,
+                color: skin.isDark ? '#000' : '#fff',
+              }}
+            >
+              <PhoneCall className="w-3.5 h-3.5" />
+              <span>{isDispatching ? 'Processing...' : 'Run inquiry (*#21#)'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Explicit Audit Status Note */}
+        <div
+          className="p-3 rounded-xl border text-xs font-mono space-y-1"
+          style={{ backgroundColor: skin.surfaceColor, borderColor: skin.borderColor }}
+        >
+          <div className="flex items-center justify-between text-amber-400 font-bold text-[11px]">
+            <span>AUDIT STATUS: UNVERIFIED (CARRIER JURISDICTION)</span>
+            {lastInquiry && (
+              <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                {new Date(lastInquiry.dispatchedAt).toLocaleTimeString()}
+              </span>
+            )}
+          </div>
+          <p className="leading-relaxed" style={{ color: skin.textSecondaryColor }}>
+            MMI audit: UNVERIFIED. Carrier inquiry dispatched. Operator result cannot be automatically verified on this device.
           </p>
+        </div>
+
+        {/* Zero-Slop Rules Card */}
+        <div
+          className="p-3 rounded-xl border space-y-1.5 text-[11px]"
+          style={{ backgroundColor: `${skin.bgColor}99`, borderColor: `${skin.borderColor}55` }}
+        >
+          <span className="font-bold uppercase tracking-wider text-slate-400 block text-[10px]">
+            Zero-Slop Verification Rules:
+          </span>
+          <ul className="list-disc list-inside space-y-1 font-mono" style={{ color: skin.textMutedColor }}>
+            <li><code>ACTION_DIAL</code> success != carrier verification</li>
+            <li>Dialer opened != MMI success</li>
+            <li>MMI code dispatched != VERIFIED</li>
+            <li>
+              Android and web application sandboxes restrict third-party apps from intercepting raw USSD dialogue dialogs without carrier-level privileges.
+            </li>
+          </ul>
         </div>
       </div>
 
@@ -114,7 +238,8 @@ export const CallSecurityView: React.FC<Props> = ({ skin }) => {
               </div>
 
               <button
-                onClick={() => handleDialCode(mmi.code, mmi.label)}
+                onClick={() => handleDispatchCode(mmi.code, mmi.label)}
+                disabled={isDispatching}
                 className="px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shrink-0 transition-all cursor-pointer hover:scale-105"
                 style={{
                   backgroundColor: mmi.code === '##002#' ? '#FF3366' : skin.surfaceColor,

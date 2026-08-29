@@ -114,9 +114,28 @@ export const LegalView: React.FC<Props> = ({ skin }) => {
         </div>
       </div>
 
-      {/* Disclaimer */}
-      <div className="p-3 rounded-xl border text-[11px]" style={{ backgroundColor: 'rgba(255, 179, 0, 0.1)', borderColor: 'rgba(255, 179, 0, 0.3)', color: '#FFB300' }}>
-        Informativni sadržaj nije zamjena za pravni savjet. Tekst treba provjeriti prema važećim nacionalnim i međunarodnim propisima.
+      {/* Disclaimer & Copyright */}
+      <div className="space-y-4">
+        <div className="p-3 rounded-xl border flex items-start gap-3" style={{ backgroundColor: 'rgba(255, 179, 0, 0.1)', borderColor: 'rgba(255, 179, 0, 0.3)', color: '#FFB300' }}>
+          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+          <div className="space-y-1 text-[11px] leading-relaxed">
+            <strong className="block uppercase tracking-widest font-mono text-xs mb-2">Anti-Spying & Illegal Tracking Warning</strong>
+            <p>Unauthorized network tracking, interception, and spying on personal devices violate fundamental privacy rights (GDPR, Constitutional Privacy). Sentinel Shield Pro is engineered to actively hunt, expose, and block illicit intruders, IMSI-catchers, and rogue network probes.</p>
+            <p>We believe in absolute network sovereignty. Malicious actors caught attempting to exploit or monitor this network will have their telemetry logged, intercepted, and isolated.</p>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-xl border text-center space-y-2" style={{ backgroundColor: skin.surfaceColor, borderColor: skin.borderColor }}>
+          <div className="text-xs font-bold" style={{ color: skin.textPrimaryColor }}>
+            © {new Date().getFullYear()} Marko Uzelac. All Rights Reserved.
+          </div>
+          <p className="text-[10px] uppercase tracking-wider" style={{ color: skin.textMutedColor }}>
+            Premium Network Security & Tracking Audit License
+          </p>
+          <a href="mailto:support@markouzelacuzy.com" className="inline-block mt-2 text-xs font-bold hover:underline transition-colors" style={{ color: skin.primaryColor }}>
+            support@markouzelacuzy.com
+          </a>
+        </div>
       </div>
     </div>
   );
